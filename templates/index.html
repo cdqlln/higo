@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Higo · 航班任务管理系统</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <span class="logo-icon">✈</span>
+      <span class="logo-text">Higo</span>
+    </div>
+    <p class="logo-sub">航班任务管理系统</p>
+  </div>
+  <nav class="nav">
+    <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+      <span class="nav-icon">◉</span> 仪表盘
+    </a>
+    <a class="nav-item" data-page="flights" onclick="navigate('flights')">
+      <span class="nav-icon">✈</span> 航班管理
+    </a>
+    <a class="nav-item" data-page="tasks" onclick="navigate('tasks')">
+      <span class="nav-icon">☑</span> 任务管理
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="clock" id="clock"></div>
+    <div class="date" id="date-display"></div>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+    <h1 class="page-title" id="page-title">仪表盘</h1>
+    <div class="topbar-actions" id="topbar-actions"></div>
+  </header>
+
+  <!-- Pages -->
+  <div class="page-content">
+
+    <!-- ── Dashboard ── -->
+    <section id="page-dashboard" class="page active">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="dashboard-row">
+        <div class="card flex-2">
+          <div class="card-header"><span>航班状态分布</span></div>
+          <div class="flight-status-list" id="flight-status-list"></div>
+        </div>
+        <div class="card flex-3">
+          <div class="card-header"><span>紧急任务</span></div>
+          <div id="urgent-tasks-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Flights ── -->
+    <section id="page-flights" class="page">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <input id="flight-search" class="search-input" placeholder="搜索航班号 / 航空公司 / 出发地 / 目的地…" oninput="debounceFlightSearch()" />
+        </div>
+        <div class="filter-wrap">
+          <select id="flight-status-filter" onchange="loadFlights()" class="select-input">
+            <option value="">全部状态</option>
+            <option value="scheduled">计划中</option>
+            <option value="boarding">登机中</option>
+            <option value="departed">已起飞</option>
+            <option value="arrived">已到达</option>
+            <option value="delayed">延误</option>
+            <option value="cancelled">取消</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="openFlightModal()">+ 新增航班</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="flights-table">
+          <thead>
+            <tr>
+              <th>航班号</th><th>航空公司</th><th>出发地</th><th>目的地</th>
+              <th>起飞时间</th><th>到达时间</th><th>机型</th><th>状态</th>
+              <th>任务</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="flights-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="flights-empty" style="display:none">暂无航班数据</div>
+      </div>
+    </section>
+
+    <!-- ── Tasks ── -->
+    <section id="page-tasks" class="page">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <input id="task-search" class="search-input" placeholder="搜索任务标题 / 负责人…" oninput="debounceTaskSearch()" />
+        </div>
+        <div class="filter-wrap filter-row">
+          <select id="task-status-filter" onchange="loadTasks()" class="select-input">
+            <option value="">全部状态</option>
+            <option value="pending">待处理</option>
+            <option value="in_progress">进行中</option>
+            <option value="completed">已完成</option>
+            <option value="cancelled">已取消</option>
+          </select>
+          <select id="task-priority-filter" onchange="loadTasks()" class="select-input">
+            <option value="">全部优先级</option>
+            <option value="urgent">紧急</option>
+            <option value="high">高</option>
+            <option value="normal">普通</option>
+            <option value="low">低</option>
+          </select>
+          <select id="task-category-filter" onchange="loadTasks()" class="select-input">
+            <option value="">全部类别</option>
+            <option value="general">综合</option>
+            <option value="safety">安全</option>
+            <option value="catering">餐饮</option>
+            <option value="maintenance">维修</option>
+            <option value="ground">地面保障</option>
+            <option value="crew">机组</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="openTaskModal()">+ 新增任务</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="tasks-table">
+          <thead>
+            <tr>
+              <th>航班</th><th>任务标题</th><th>类别</th><th>优先级</th>
+              <th>状态</th><th>负责人</th><th>截止时间</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tasks-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="tasks-empty" style="display:none">暂无任务数据</div>
+      </div>
+    </section>
+
+  </div><!-- /page-content -->
+</main>
+
+<!-- ── Flight Modal ── -->
+<div class="modal-overlay" id="flight-modal-overlay" onclick="closeFlightModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="flight-modal-title">新增航班</h2>
+      <button class="modal-close" onclick="closeFlightModal()">✕</button>
+    </div>
+    <form id="flight-form" onsubmit="submitFlightForm(event)">
+      <input type="hidden" id="flight-id" />
+      <div class="form-grid">
+        <div class="form-group">
+          <label>航班号 *</label>
+          <input id="f-flight_number" class="form-input" placeholder="如 CA1234" required />
+        </div>
+        <div class="form-group">
+          <label>航空公司 *</label>
+          <input id="f-airline" class="form-input" placeholder="如 中国国际航空" required />
+        </div>
+        <div class="form-group">
+          <label>出发地 *</label>
+          <input id="f-origin" class="form-input" placeholder="如 北京(PEK)" required />
+        </div>
+        <div class="form-group">
+          <label>目的地 *</label>
+          <input id="f-destination" class="form-input" placeholder="如 上海(PVG)" required />
+        </div>
+        <div class="form-group">
+          <label>起飞时间 *</label>
+          <input id="f-departure_time" class="form-input" type="datetime-local" required />
+        </div>
+        <div class="form-group">
+          <label>到达时间 *</label>
+          <input id="f-arrival_time" class="form-input" type="datetime-local" required />
+        </div>
+        <div class="form-group">
+          <label>机型</label>
+          <input id="f-aircraft_type" class="form-input" placeholder="如 Boeing 737-800" />
+        </div>
+        <div class="form-group">
+          <label>状态</label>
+          <select id="f-status" class="form-input">
+            <option value="scheduled">计划中</option>
+            <option value="boarding">登机中</option>
+            <option value="departed">已起飞</option>
+            <option value="arrived">已到达</option>
+            <option value="delayed">延误</option>
+            <option value="cancelled">取消</option>
+          </select>
+        </div>
+        <div class="form-group form-group-full">
+          <label>备注</label>
+          <textarea id="f-remarks" class="form-input form-textarea" placeholder="备注信息…"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeFlightModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Task Modal ── -->
+<div class="modal-overlay" id="task-modal-overlay" onclick="closeTaskModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="task-modal-title">新增任务</h2>
+      <button class="modal-close" onclick="closeTaskModal()">✕</button>
+    </div>
+    <form id="task-form" onsubmit="submitTaskForm(event)">
+      <input type="hidden" id="task-id" />
+      <div class="form-grid">
+        <div class="form-group form-group-full">
+          <label>关联航班 *</label>
+          <select id="t-flight_id" class="form-input" required></select>
+        </div>
+        <div class="form-group form-group-full">
+          <label>任务标题 *</label>
+          <input id="t-title" class="form-input" placeholder="任务标题" required />
+        </div>
+        <div class="form-group">
+          <label>类别</label>
+          <select id="t-category" class="form-input">
+            <option value="general">综合</option>
+            <option value="safety">安全</option>
+            <option value="catering">餐饮</option>
+            <option value="maintenance">维修</option>
+            <option value="ground">地面保障</option>
+            <option value="crew">机组</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>优先级</label>
+          <select id="t-priority" class="form-input">
+            <option value="low">低</option>
+            <option value="normal">普通</option>
+            <option value="high" selected>高</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>状态</label>
+          <select id="t-status" class="form-input">
+            <option value="pending">待处理</option>
+            <option value="in_progress">进行中</option>
+            <option value="completed">已完成</option>
+            <option value="cancelled">已取消</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>负责人</label>
+          <input id="t-assigned_to" class="form-input" placeholder="负责人 / 部门" />
+        </div>
+        <div class="form-group">
+          <label>截止时间</label>
+          <input id="t-due_time" class="form-input" type="datetime-local" />
+        </div>
+        <div class="form-group form-group-full">
+          <label>任务描述</label>
+          <textarea id="t-description" class="form-input form-textarea" placeholder="任务详情…"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeTaskModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Flight Detail Modal ── -->
+<div class="modal-overlay" id="detail-modal-overlay" onclick="closeDetailModal()">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="detail-modal-title">航班详情</h2>
+      <button class="modal-close" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div id="detail-modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
