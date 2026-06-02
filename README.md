@@ -81,10 +81,37 @@ AI WorkDeck
 
 ## 运行
 
+四种访问方式,按推荐顺序:
+
+### 1. 本地开发(最快)
 ```sh
+git clone -b claude/ai-workdeck-prototype-pdf-Jjo25 https://github.com/cdqlln/higo.git
+cd higo
 npm install
-npm run dev          # 开发,http://localhost:5173
-npm run build        # 生产构建 → dist/
+npm run dev          # → 浏览器打开 http://localhost:5173
+```
+
+### 2. 直接打开静态文件(零配置)
+```sh
+npm install && npm run build
+# 然后用浏览器打开 dist/index.html(file:// 协议即可)
+```
+
+### 3. 本地预览生产构建
+```sh
+npm run build
+npm run preview      # → http://localhost:4173
+```
+
+### 4. GitHub Pages(已配置工作流)
+- 仓库 `Settings → Pages → Source: GitHub Actions`
+- 推送任意提交后,workflow 自动构建并部署到 `https://<user>.github.io/higo/`
+- 工作流文件:`.github/workflows/pages.yml`
+
+> 路由说明:为了兼容静态托管(GitHub Pages、`file://`、任意 CDN),应用使用 `HashRouter`,URL 形如 `/#/workspace`、`/#/project/abc`。直接深链可用。
+
+### 其他命令
+```sh
 npm run typecheck    # 仅类型检查
 ```
 
