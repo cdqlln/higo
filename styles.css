@@ -346,7 +346,7 @@ mark { background: rgba(212, 175, 106, 0.18); color: var(--accent); padding: 0 4
 /* =============================================
    SCREEN 2 · WORKSPACE
    ============================================= */
-.screen-workspace {
+.screen-workspace.active {
   display: grid;
   grid-template-columns: 240px 1fr;
   min-height: calc(100vh - 56px - 40px);
@@ -546,7 +546,7 @@ mark { background: rgba(212, 175, 106, 0.18); color: var(--accent); padding: 0 4
 /* =============================================
    SCREEN 3 · IDE (PROJECT)
    ============================================= */
-.screen-project { height: calc(100vh - 56px - 40px); display: flex; flex-direction: column; }
+.screen-project.active { height: calc(100vh - 56px - 40px); display: flex; flex-direction: column; }
 
 .ide-topbar {
   height: 44px;
