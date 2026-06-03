@@ -65,9 +65,10 @@ const SPA_HTML = `
 <p>转让方陈述并保证:(一) 目标公司合法存续……</p>
 `;
 
-function seedProjects(): Project[] {
+function seedProjects(userId: string): Project[] {
   const p1: Project = {
-    id: "proj-szci-haina",
+    id: uid("proj"),
+    userId,
     name: "深创投 × 海纳光电 · 并购尽调",
     client: "深圳创新投资集团",
     domain: "M&A",
@@ -133,7 +134,8 @@ function seedProjects(): Project[] {
   }
 
   const p2: Project = {
-    id: "proj-kangye-admin",
+    id: uid("proj"),
+    userId,
     name: "某医药公司行政处罚听证",
     client: "康业医药股份",
     domain: "Administrative",
@@ -161,7 +163,8 @@ function seedProjects(): Project[] {
   };
 
   const p3: Project = {
-    id: "proj-data-compliance",
+    id: uid("proj"),
+    userId,
     name: "跨境数据合规年度评审",
     client: "某互联网集团(欧盟业务)",
     domain: "Compliance",
@@ -185,7 +188,8 @@ function seedProjects(): Project[] {
   };
 
   const p4: Project = {
-    id: "proj-siac",
+    id: uid("proj"),
+    userId,
     name: "SIAC 仲裁 · 申请人材料",
     client: "盈泰能源(新加坡)",
     domain: "Arbitration",
@@ -211,18 +215,19 @@ function seedProjects(): Project[] {
   return [p1, p2, p3, p4];
 }
 
-function seedClipboard(): ClipboardItem[] {
+function seedClipboard(userId: string): ClipboardItem[] {
   return [
-    { id: uid("c"), text: "深圳市海纳光电股份有限公司", source: "尽职调查报告", createdAt: now() - 5 * 60000 },
-    { id: uid("c"), text: "91440300MA5XXXXXX", source: "工商档案", createdAt: now() - 8 * 60000 },
-    { id: uid("c"), text: "《公司法》第一百一十五条", source: "北大法宝", createdAt: now() - 12 * 60000 },
+    { id: uid("c"), userId, text: "深圳市海纳光电股份有限公司", source: "尽职调查报告", createdAt: now() - 5 * 60000 },
+    { id: uid("c"), userId, text: "91440300MA5XXXXXX", source: "工商档案", createdAt: now() - 8 * 60000 },
+    { id: uid("c"), userId, text: "《公司法》第一百一十五条", source: "北大法宝", createdAt: now() - 12 * 60000 },
   ];
 }
 
-function seedSnippets(): SnippetItem[] {
+function seedSnippets(userId: string): SnippetItem[] {
   return [
     {
       id: uid("s"),
+      userId,
       name: "尽调开篇",
       shortcut: "/dd-intro",
       body:
@@ -231,6 +236,7 @@ function seedSnippets(): SnippetItem[] {
     },
     {
       id: uid("s"),
+      userId,
       name: "法条引用",
       shortcut: "/cite",
       body: "依据《{{statute}}》第{{article}}之规定,",
@@ -238,22 +244,23 @@ function seedSnippets(): SnippetItem[] {
     },
     {
       id: uid("s"),
+      userId,
       name: "风险提示前缀",
       shortcut: "/risk",
-      body: "**风险（{{level}}）——{{title}}：**",
+      body: "**风险({{level}})——{{title}}:**",
       updatedAt: now(),
     },
   ];
 }
 
-function seedVariables(): VariableItem[] {
+function seedVariables(userId: string): VariableItem[] {
   return [
-    { id: uid("v"), key: "client_full_name", value: "深圳创新投资集团有限公司" },
-    { id: uid("v"), key: "target_company", value: "深圳市海纳光电股份有限公司" },
-    { id: uid("v"), key: "deal_type", value: "收购" },
-    { id: uid("v"), key: "document_type", value: "法律尽职调查报告" },
-    { id: uid("v"), key: "lawyer_name", value: "陈律师" },
-    { id: uid("v"), key: "firm_name", value: "King and Wood" },
+    { id: uid("v"), userId, key: "client_full_name", value: "深圳创新投资集团有限公司" },
+    { id: uid("v"), userId, key: "target_company", value: "深圳市海纳光电股份有限公司" },
+    { id: uid("v"), userId, key: "deal_type", value: "收购" },
+    { id: uid("v"), userId, key: "document_type", value: "法律尽职调查报告" },
+    { id: uid("v"), userId, key: "lawyer_name", value: "陈律师" },
+    { id: uid("v"), userId, key: "firm_name", value: "King and Wood" },
   ];
 }
 
@@ -278,11 +285,18 @@ function seedInstalled(): string[] {
   ];
 }
 
+/** Returns the full demo bundle for a user (used by Register "load demo data"
+ *  and by v1 → v2 persist migration). */
+export function seedFor(userId: string) {
+  return {
+    projects: seedProjects(userId),
+    clipboard: seedClipboard(userId),
+    snippets: seedSnippets(userId),
+    variables: seedVariables(userId),
+  };
+}
+
 export const SEED = {
-  projects: seedProjects,
-  clipboard: seedClipboard,
-  snippets: seedSnippets,
-  variables: seedVariables,
   settings: seedSettings,
   installed: seedInstalled,
 };

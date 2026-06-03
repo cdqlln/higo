@@ -1,18 +1,28 @@
-/* Combined Zustand store with localStorage persistence.
+/* Combined Zustand store with localStorage persistence + auth.
  *
- * Keeps projects, daily essentials, installed skills, and settings.
- * Persistence key: "workdeck-v1"
+ * Persistence key: "workdeck-v1" (current version: 2)
+ *
+ * Data shape:
+ *   - `accounts` holds all registered user accounts (with PBKDF2 hashes)
+ *   - `currentUserId` is the active session, null = logged out
+ *   - `projects` / `clipboard` / `snippets` / `variables` carry a `userId`
+ *     so the same store serves multiple accounts; UI uses
+ *     `useUserProjects()` etc. which filter by current user.
  */
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import { uid } from "../lib/id";
-import { SEED } from "./seed";
+import { SEED, seedFor } from "./seed";
+import { generateSalt, hashPassword, verifyPassword } from "../lib/auth";
 import type {
+  Account,
   AgentMessage,
   ClipboardItem,
   Project,
   ProjectStatus,
+  Role,
   SettingsState,
   SnippetItem,
   TreeNode,
@@ -21,14 +31,36 @@ import type {
 } from "../types";
 
 interface StoreState {
+  /* ---------- Auth ---------- */
+  accounts: Account[];
+  currentUserId: string | null;
+
+  /* ---------- Domain data (cross-user, filtered at the selector) ---------- */
   projects: Project[];
   clipboard: ClipboardItem[];
   snippets: SnippetItem[];
   variables: VariableItem[];
   installedSkills: string[];
   settings: SettingsState;
+
   /** Toasts for global feedback */
   toasts: { id: string; text: string; kind: "info" | "ok" | "warn" }[];
+
+  /* ---------- Auth actions ---------- */
+  register: (input: {
+    email: string;
+    password: string;
+    name: string;
+    firm?: string;
+    role?: Role;
+    seedDemo?: boolean;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  logout: () => void;
+  updateAccount: (id: string, patch: Partial<Account>) => void;
 
   /* ---------- Projects ---------- */
   createProject: (p: Partial<Project>) => string;
@@ -67,9 +99,9 @@ interface StoreState {
   /* ---------- Clipboard / snippets / variables ---------- */
   addClip: (text: string, source?: string) => void;
   removeClip: (id: string) => void;
-  addSnippet: (s: Omit<SnippetItem, "id" | "updatedAt">) => string;
+  addSnippet: (s: Omit<SnippetItem, "id" | "userId" | "updatedAt">) => string;
   removeSnippet: (id: string) => void;
-  addVariable: (v: Omit<VariableItem, "id">) => string;
+  addVariable: (v: Omit<VariableItem, "id" | "userId">) => string;
   updateVariable: (id: string, patch: Partial<VariableItem>) => void;
   removeVariable: (id: string) => void;
 
@@ -133,19 +165,89 @@ function fileIcon(name: string): string {
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
-      projects: SEED.projects(),
-      clipboard: SEED.clipboard(),
-      snippets: SEED.snippets(),
-      variables: SEED.variables(),
+      accounts: [],
+      currentUserId: null,
+      projects: [],
+      clipboard: [],
+      snippets: [],
+      variables: [],
       installedSkills: SEED.installed(),
       settings: SEED.settings(),
       toasts: [],
 
+      /* ---------- Auth ---------- */
+      register: async (input) => {
+        const email = input.email.trim().toLowerCase();
+        if (get().accounts.some((a) => a.email === email)) {
+          return { ok: false, error: "该邮箱已注册" };
+        }
+        const id = uid("user");
+        const salt = generateSalt();
+        const passwordHash = await hashPassword(input.password, salt);
+        const initials = (input.name.match(/[一-龥A-Za-z]/g) ?? ["U"])
+          .slice(0, 1)
+          .join("");
+        const account: Account = {
+          id,
+          email,
+          name: input.name.trim() || email.split("@")[0],
+          passwordHash,
+          passwordSalt: salt,
+          role: input.role ?? "lawyer",
+          firm: input.firm,
+          avatar: initials,
+          createdAt: Date.now(),
+          lastSeenAt: Date.now(),
+        };
+        const seed = input.seedDemo ? seedFor(id) : null;
+        set({
+          accounts: [...get().accounts, account],
+          currentUserId: id,
+          projects: seed ? [...get().projects, ...seed.projects] : get().projects,
+          clipboard: seed ? [...get().clipboard, ...seed.clipboard] : get().clipboard,
+          snippets: seed ? [...get().snippets, ...seed.snippets] : get().snippets,
+          variables: seed ? [...get().variables, ...seed.variables] : get().variables,
+          settings: { ...get().settings, agentTitle: account.name },
+        });
+        get().pushToast(`欢迎,${account.name}`, "ok");
+        return { ok: true };
+      },
+
+      login: async (email, password) => {
+        const e = email.trim().toLowerCase();
+        const account = get().accounts.find((a) => a.email === e);
+        if (!account) return { ok: false, error: "账号不存在" };
+        const ok = await verifyPassword(password, account.passwordSalt, account.passwordHash);
+        if (!ok) return { ok: false, error: "密码错误" };
+        set({
+          currentUserId: account.id,
+          accounts: get().accounts.map((a) =>
+            a.id === account.id ? { ...a, lastSeenAt: Date.now() } : a,
+          ),
+          settings: { ...get().settings, agentTitle: account.name },
+        });
+        get().pushToast(`欢迎回来,${account.name}`, "ok");
+        return { ok: true };
+      },
+
+      logout: () => {
+        set({ currentUserId: null });
+      },
+
+      updateAccount: (id, patch) => {
+        set({
+          accounts: get().accounts.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+        });
+      },
+
       /* ---------- Projects ---------- */
       createProject: (p) => {
         const id = uid("proj");
+        const userId = get().currentUserId;
+        if (!userId) throw new Error("createProject: no current user");
         const project: Project = {
           id,
+          userId,
           name: p.name ?? "未命名项目",
           client: p.client ?? "",
           domain: p.domain ?? "M&A",
@@ -153,7 +255,7 @@ export const useStore = create<StoreState>()(
           progress: 0,
           milestones: { done: 0, total: 5 },
           agentTasks: 0,
-          team: p.team ?? ["陈"],
+          team: p.team ?? [get().accounts.find((a) => a.id === userId)?.avatar ?? "U"],
           starred: false,
           mountedMcp: get().installedSkills.filter((id) => id.startsWith("mcp-")),
           conversation: [],
@@ -400,18 +502,23 @@ export const useStore = create<StoreState>()(
       /* ---------- Essentials ---------- */
       addClip: (text, source) => {
         if (!text.trim()) return;
-        set({
-          clipboard: [
-            { id: uid("c"), text, source, createdAt: Date.now() },
-            ...get().clipboard.filter((c) => c.text !== text),
-          ].slice(0, 20),
-        });
+        const userId = get().currentUserId;
+        if (!userId) return;
+        const myClips = get().clipboard.filter((c) => c.userId === userId);
+        const otherClips = get().clipboard.filter((c) => c.userId !== userId);
+        const newMy = [
+          { id: uid("c"), userId, text, source, createdAt: Date.now() },
+          ...myClips.filter((c) => c.text !== text),
+        ].slice(0, 20);
+        set({ clipboard: [...otherClips, ...newMy] });
       },
       removeClip: (id) => set({ clipboard: get().clipboard.filter((c) => c.id !== id) }),
       addSnippet: (s) => {
         const id = uid("s");
+        const userId = get().currentUserId;
+        if (!userId) return id;
         set({
-          snippets: [{ id, updatedAt: Date.now(), ...s }, ...get().snippets],
+          snippets: [{ id, userId, updatedAt: Date.now(), ...s }, ...get().snippets],
         });
         return id;
       },
@@ -419,7 +526,9 @@ export const useStore = create<StoreState>()(
         set({ snippets: get().snippets.filter((s) => s.id !== id) }),
       addVariable: (v) => {
         const id = uid("v");
-        set({ variables: [{ id, ...v }, ...get().variables] });
+        const userId = get().currentUserId;
+        if (!userId) return id;
+        set({ variables: [{ id, userId, ...v }, ...get().variables] });
         return id;
       },
       updateVariable: (id, patch) =>
@@ -477,21 +586,89 @@ export const useStore = create<StoreState>()(
         set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
       resetAll: () => {
-        set({
-          projects: SEED.projects(),
-          clipboard: SEED.clipboard(),
-          snippets: SEED.snippets(),
-          variables: SEED.variables(),
-          installedSkills: SEED.installed(),
-          settings: SEED.settings(),
-        });
+        const userId = get().currentUserId;
+        if (!userId) {
+          // Logged out: nuke everything
+          set({
+            accounts: [],
+            projects: [],
+            clipboard: [],
+            snippets: [],
+            variables: [],
+            installedSkills: SEED.installed(),
+            settings: SEED.settings(),
+          });
+        } else {
+          // Logged in: reset only the current user's data, leave other accounts intact
+          const seed = seedFor(userId);
+          set({
+            projects: [
+              ...get().projects.filter((p) => p.userId !== userId),
+              ...seed.projects,
+            ],
+            clipboard: [
+              ...get().clipboard.filter((c) => c.userId !== userId),
+              ...seed.clipboard,
+            ],
+            snippets: [
+              ...get().snippets.filter((s) => s.userId !== userId),
+              ...seed.snippets,
+            ],
+            variables: [
+              ...get().variables.filter((v) => v.userId !== userId),
+              ...seed.variables,
+            ],
+            installedSkills: SEED.installed(),
+            settings: SEED.settings(),
+          });
+        }
         get().pushToast("已重置为初始状态", "ok");
       },
     }),
     {
       name: "workdeck-v1",
-      version: 1,
+      version: 2,
+      migrate: (persisted: unknown, fromVersion: number) => {
+        const p = persisted as Partial<StoreState> & {
+          projects?: Project[];
+          clipboard?: ClipboardItem[];
+          snippets?: SnippetItem[];
+          variables?: VariableItem[];
+        };
+        if (fromVersion < 2) {
+          // v1 → v2: create a legacy "Demo" account and tag all old data
+          // with its userId. The legacy account has an empty hash, so it
+          // can't be logged into directly; users log out and create their
+          // own account, or use the seeded demo account flow.
+          const demoId = "user_legacy_demo";
+          const stamp = <T extends { userId?: string }>(arr: T[] | undefined): T[] =>
+            (arr ?? []).map((x) => ({ ...x, userId: x.userId ?? demoId }));
+          const legacyAccount: Account = {
+            id: demoId,
+            email: "legacy@workdeck.local",
+            name: "Legacy Demo",
+            passwordHash: "",
+            passwordSalt: "",
+            role: "lawyer",
+            avatar: "L",
+            createdAt: Date.now(),
+            lastSeenAt: Date.now(),
+          };
+          return {
+            ...(p as object),
+            accounts: [legacyAccount],
+            currentUserId: null, // force a fresh login
+            projects: stamp(p.projects),
+            clipboard: stamp(p.clipboard),
+            snippets: stamp(p.snippets),
+            variables: stamp(p.variables),
+          } as unknown as StoreState;
+        }
+        return persisted as StoreState;
+      },
       partialize: (s) => ({
+        accounts: s.accounts,
+        currentUserId: s.currentUserId,
         projects: s.projects,
         clipboard: s.clipboard,
         snippets: s.snippets,
@@ -503,7 +680,63 @@ export const useStore = create<StoreState>()(
   ),
 );
 
-/* ---------- Selector helpers (stable across renders) ---------- */
+/* ============================================
+ * Selector helpers — scope reads by current user
+ * ============================================ */
+
+export function useCurrentUser(): Account | null {
+  return useStore((s) =>
+    s.currentUserId ? s.accounts.find((a) => a.id === s.currentUserId) ?? null : null,
+  );
+}
+
+export function useIsAuthenticated(): boolean {
+  return useStore((s) => s.currentUserId !== null);
+}
+
+export function useUserProjects(): Project[] {
+  return useStore(
+    useShallow((s) =>
+      s.currentUserId ? s.projects.filter((p) => p.userId === s.currentUserId) : [],
+    ),
+  );
+}
+
+export function useUserClipboard(): ClipboardItem[] {
+  return useStore(
+    useShallow((s) =>
+      s.currentUserId ? s.clipboard.filter((c) => c.userId === s.currentUserId) : [],
+    ),
+  );
+}
+
+export function useUserSnippets(): SnippetItem[] {
+  return useStore(
+    useShallow((s) =>
+      s.currentUserId ? s.snippets.filter((c) => c.userId === s.currentUserId) : [],
+    ),
+  );
+}
+
+export function useUserVariables(): VariableItem[] {
+  return useStore(
+    useShallow((s) =>
+      s.currentUserId ? s.variables.filter((c) => c.userId === s.currentUserId) : [],
+    ),
+  );
+}
+
+/* ---------- Project lookup (still global lookup; consumer must own it) ---------- */
 export function useProject(id: string | undefined): Project | undefined {
-  return useStore((s) => s.projects.find((p) => p.id === id));
+  return useStore((s) => {
+    if (!id || !s.currentUserId) return undefined;
+    const p = s.projects.find((x) => x.id === id);
+    if (!p) return undefined;
+    return p.userId === s.currentUserId ? p : undefined;
+  });
+}
+
+/* Legacy alias kept so existing call sites compile */
+export function _allProjects(): Project[] {
+  return useStore.getState().projects;
 }

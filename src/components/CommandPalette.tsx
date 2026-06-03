@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../store";
+import { useStore, useUserProjects, useUserSnippets } from "../store";
 
 interface Cmd {
   id: string;
@@ -12,8 +12,8 @@ interface Cmd {
 
 export default function CommandPalette({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
-  const projects = useStore((s) => s.projects);
-  const snippets = useStore((s) => s.snippets);
+  const projects = useUserProjects();
+  const snippets = useUserSnippets();
   const installSkill = useStore((s) => s.installSkill);
   const resetAll = useStore((s) => s.resetAll);
   const pushToast = useStore((s) => s.pushToast);

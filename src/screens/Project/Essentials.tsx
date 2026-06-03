@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore } from "../../store";
+import { useStore, useUserClipboard, useUserSnippets, useUserVariables } from "../../store";
 
 type Tab = "clipboard" | "variables" | "snippets" | "bookmarks";
 
@@ -13,9 +13,9 @@ function formatRel(ts: number): string {
 }
 
 export default function Essentials() {
-  const clipboard = useStore((s) => s.clipboard);
-  const variables = useStore((s) => s.variables);
-  const snippets = useStore((s) => s.snippets);
+  const clipboard = useUserClipboard();
+  const variables = useUserVariables();
+  const snippets = useUserSnippets();
   const removeClip = useStore((s) => s.removeClip);
   const addVariable = useStore((s) => s.addVariable);
   const updateVariable = useStore((s) => s.updateVariable);

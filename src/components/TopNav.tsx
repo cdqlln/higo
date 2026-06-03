@@ -1,11 +1,30 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { useStore } from "../store";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useCurrentUser, useStore, useUserProjects } from "../store";
 
 export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const settings = useStore((s) => s.settings);
+  const user = useCurrentUser();
   const installed = useStore((s) => s.installedSkills.length);
+  const logout = useStore((s) => s.logout);
+  const userProjects = useUserProjects();
+  const nav = useNavigate();
   const loc = useLocation();
   const onProject = loc.pathname.startsWith("/project/");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    if (menuOpen) document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpen]);
+
+  // Determine a "default project" link target — first user project, or workspace
+  const projectsTarget = userProjects[0]?.id
+    ? `/project/${userProjects[0].id}`
+    : "/workspace";
 
   return (
     <header className="top-nav">
@@ -27,7 +46,7 @@ export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void })
         <NavLink to="/workspace" className={({ isActive }) => "nav-tab" + (isActive ? " active" : "")}>
           工作台
         </NavLink>
-        <NavLink to="/project/proj-szci-haina" className={"nav-tab" + (onProject ? " active" : "")}>
+        <NavLink to={projectsTarget} className={"nav-tab" + (onProject ? " active" : "")}>
           项目
         </NavLink>
         <NavLink to="/marketplace" className={({ isActive }) => "nav-tab" + (isActive ? " active" : "")}>
@@ -46,11 +65,61 @@ export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void })
           <span>全局搜索</span>
           <kbd>⌘K</kbd>
         </button>
-        <div className="user-chip">
-          <div className="avatar">{settings.agentTitle.slice(0, 1)}</div>
-          <span>{settings.agentTitle}</span>
+        <div className="user-menu-wrap" ref={menuRef}>
+          <button className="user-chip" onClick={() => setMenuOpen((v) => !v)}>
+            <div className="avatar">{user?.avatar ?? user?.name?.slice(0, 1) ?? "U"}</div>
+            <span>{user?.name ?? "未登录"}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {menuOpen && user && (
+            <div className="user-menu">
+              <div className="user-menu-head">
+                <div className="avatar lg">{user.avatar ?? user.name.slice(0, 1)}</div>
+                <div>
+                  <div className="user-menu-name">{user.name}</div>
+                  <div className="user-menu-email">{user.email}</div>
+                  {user.firm && <div className="user-menu-firm">{user.firm}</div>}
+                </div>
+              </div>
+              <div className="user-menu-meta">
+                <span>{roleLabel(user.role)}</span>
+                <span>·</span>
+                <span>{userProjects.length} 项目</span>
+              </div>
+              <div className="user-menu-divider" />
+              <button
+                className="user-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  nav("/settings");
+                }}
+              >
+                ⚙ 个人设置
+              </button>
+              <button
+                className="user-menu-item danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  logout();
+                  nav("/login", { replace: true });
+                }}
+              >
+                ⎋ 退出登录
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
+  );
+}
+
+function roleLabel(r: string): string {
+  return (
+    { lawyer: "执业律师", partner: "合伙人", paralegal: "律师助理", admin: "管理员" }[
+      r
+    ] ?? r
   );
 }

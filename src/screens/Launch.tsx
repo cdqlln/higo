@@ -1,5 +1,5 @@
 import { useNavigate, Link } from "react-router-dom";
-import { useStore } from "../store";
+import { useCurrentUser, useStore, useUserProjects } from "../store";
 
 const domainBadge: Record<string, { txt: string; cls: string }> = {
   "M&A": { txt: "M&A", cls: "icon-blue" },
@@ -30,7 +30,8 @@ function formatRelative(ts: number): string {
 
 export default function Launch() {
   const nav = useNavigate();
-  const projects = useStore((s) => s.projects);
+  const user = useCurrentUser();
+  const projects = useUserProjects();
   const createProject = useStore((s) => s.createProject);
 
   const recent = [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
@@ -41,7 +42,7 @@ export default function Launch() {
         <div className="launch-hero">
           <div className="kicker">
             <span className="kicker-dot" />
-            One Deck for All · Built in China, for the Profession of Tomorrow
+            {user ? `${user.name},欢迎回来` : "One Deck for All"}
           </div>
           <h1 className="launch-title">
             一个工作台,

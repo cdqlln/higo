@@ -1,5 +1,20 @@
 /* AI WorkDeck · Domain types */
 
+export type Role = "lawyer" | "partner" | "paralegal" | "admin";
+
+export interface Account {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  passwordSalt: string;
+  role: Role;
+  firm?: string;
+  avatar?: string;        // initials or emoji
+  createdAt: number;
+  lastSeenAt: number;
+}
+
 export type Domain =
   | "M&A"
   | "Administrative"
@@ -12,18 +27,19 @@ export type ProjectStatus = "active" | "urgent" | "draft" | "completed" | "archi
 
 export interface Project {
   id: string;
+  userId: string;         // owner — for per-user isolation
   name: string;
   client: string;
   domain: Domain;
   status: ProjectStatus;
-  progress: number;       // 0..1
+  progress: number;
   milestones: { done: number; total: number };
   agentTasks: number;
-  team: string[];         // initials
+  team: string[];
   fileTree: TreeNode[];
-  openFileIds: string[];  // currently opened tabs
+  openFileIds: string[];
   activeFileId: string | null;
-  mountedMcp: string[];   // ids of installed MCP servers attached to this project
+  mountedMcp: string[];
   conversation: AgentMessage[];
   starred: boolean;
   createdAt: number;
@@ -70,25 +86,28 @@ export interface ToolCall {
   label?: string;
 }
 
-/* ---------- Daily Essentials (persistent across all projects) ---------- */
+/* ---------- Daily Essentials (per-user, cross-project) ---------- */
 export interface ClipboardItem {
   id: string;
+  userId: string;
   text: string;
-  source?: string;       // project name or "manual"
+  source?: string;
   createdAt: number;
 }
 
 export interface SnippetItem {
   id: string;
+  userId: string;
   name: string;
-  body: string;          // may contain {{variables}}
-  shortcut?: string;     // e.g. "/dd-intro"
+  body: string;
+  shortcut?: string;
   updatedAt: number;
 }
 
 export interface VariableItem {
   id: string;
-  key: string;           // e.g. "client_full_name"
+  userId: string;
+  key: string;
   value: string;
   description?: string;
 }

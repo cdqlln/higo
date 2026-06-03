@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../store";
+import { useStore, useUserProjects } from "../store";
 import type { Domain, Project, ProjectStatus } from "../types";
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -43,7 +43,7 @@ function formatRelative(ts: number): string {
 
 export default function Workspace() {
   const nav = useNavigate();
-  const projects = useStore((s) => s.projects);
+  const projects = useUserProjects();
   const createProject = useStore((s) => s.createProject);
   const deleteProject = useStore((s) => s.deleteProject);
   const toggleStar = useStore((s) => s.toggleStar);
