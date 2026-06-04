@@ -1,5 +1,6 @@
 import { useNavigate, Link } from "react-router-dom";
 import { useCurrentUser, useStore, useUserProjects } from "../store";
+import { GROUP_KICKER, GROUP_LABEL } from "../types";
 
 const domainBadge: Record<string, { txt: string; cls: string }> = {
   "M&A": { txt: "M&A", cls: "icon-blue" },
@@ -42,8 +43,13 @@ export default function Launch() {
         <div className="launch-hero">
           <div className="kicker">
             <span className="kicker-dot" />
-            {user ? `${user.name},欢迎回来` : "One Deck for All"}
+            {user
+              ? `${user.name} · ${GROUP_LABEL[user.group]} · 欢迎回来`
+              : "One Deck for All"}
           </div>
+          {user && (
+            <div className="launch-group-tag">{GROUP_KICKER[user.group]}</div>
+          )}
           <h1 className="launch-title">
             一个工作台,
             <br />

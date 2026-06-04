@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useCurrentUser, useStore, useUserProjects } from "../store";
+import { GROUP_LABEL, ROLE_LABEL } from "../types";
+import type { Role, UserGroup } from "../types";
 
 export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void }) {
   const user = useCurrentUser();
@@ -80,7 +82,8 @@ export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void })
                 <div>
                   <div className="user-menu-name">{user.name}</div>
                   <div className="user-menu-email">{user.email}</div>
-                  {user.firm && <div className="user-menu-firm">{user.firm}</div>}
+                  {user.organization && <div className="user-menu-firm">{user.organization}</div>}
+                  <div className="user-menu-group">{groupLabel(user.group)}</div>
                 </div>
               </div>
               <div className="user-menu-meta">
@@ -116,10 +119,10 @@ export default function TopNav({ onOpenPalette }: { onOpenPalette: () => void })
   );
 }
 
-function roleLabel(r: string): string {
-  return (
-    { lawyer: "执业律师", partner: "合伙人", paralegal: "律师助理", admin: "管理员" }[
-      r
-    ] ?? r
-  );
+function roleLabel(r: Role | string): string {
+  return ROLE_LABEL[r as Role] ?? String(r);
+}
+
+function groupLabel(g: UserGroup | string): string {
+  return GROUP_LABEL[g as UserGroup] ?? String(g);
 }

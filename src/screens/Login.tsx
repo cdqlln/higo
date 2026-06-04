@@ -50,7 +50,8 @@ export default function Login() {
         email: demoEmail,
         password: "demo123",
         name: "陈律师 (Demo)",
-        firm: "King and Wood",
+        organization: "King and Wood",
+        group: "law-firm",
         role: "lawyer",
         seedDemo: true,
       });

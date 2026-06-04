@@ -6,6 +6,7 @@ import type {
   SettingsState,
   SnippetItem,
   TreeNode,
+  UserGroup,
   VariableItem,
 } from "../types";
 import { uid } from "../lib/id";
@@ -285,15 +286,429 @@ function seedInstalled(): string[] {
   ];
 }
 
-/** Returns the full demo bundle for a user (used by Register "load demo data"
- *  and by v1 → v2 persist migration). */
+/* ============================================
+ * Per-group seed data
+ * ============================================ */
+
+function inHouseProjects(userId: string): Project[] {
+  return [
+    {
+      id: uid("proj"),
+      userId,
+      name: "供应商主框架合同审阅(批量)",
+      client: "采购部 / 供应链中心",
+      domain: "Compliance",
+      status: "active",
+      progress: 0.55,
+      milestones: { done: 6, total: 11 },
+      agentTasks: 5,
+      team: ["顾", "李"],
+      starred: true,
+      mountedMcp: ["mcp-pkulaw", "mcp-samr"],
+      conversation: [],
+      fileTree: [
+        folder("01_待审合同", [
+          file("供应商 A · 框架采购协议 v2.docx", "<h1>框架采购协议</h1><p>(待审阅)</p>", "📄"),
+          file("供应商 B · 服务外包协议.docx", "<h1>服务外包协议</h1>", "📄"),
+        ]),
+        folder("02_所内标准条款库", [
+          file("不利变更条款 · 标准模板.docx", "<h1>不利变更条款</h1>"),
+          file("数据保护条款 · 标准模板.docx", "<h1>数据保护条款</h1>"),
+        ], false),
+        folder("03_审阅意见", [
+          file("审阅意见 · 供应商A.docx", "<h1>审阅意见</h1>", "📄"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 7,
+      updatedAt: now() - 60 * 1000 * 12,
+    },
+    {
+      id: uid("proj"),
+      userId,
+      name: "2026 H1 合规风险年度评审",
+      client: "合规与风险委员会",
+      domain: "Compliance",
+      status: "draft",
+      progress: 0.18,
+      milestones: { done: 2, total: 11 },
+      agentTasks: 1,
+      team: ["顾"],
+      starred: false,
+      mountedMcp: ["mcp-pkulaw", "mcp-admin-penalty"],
+      conversation: [],
+      fileTree: [
+        folder("01_评审范围", [
+          file("年度评审计划.docx", "<h1>年度评审计划</h1><p>覆盖反垄断、个人信息保护、出口管制等。</p>"),
+        ]),
+        folder("02_问卷与访谈", [
+          file("各事业部合规问卷.xlsx", "<h1>合规问卷</h1>", "📊"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 14,
+      updatedAt: now() - 86400000 * 2,
+    },
+    {
+      id: uid("proj"),
+      userId,
+      name: "内部举报调查 · 财务部",
+      client: "审计与合规 / 董事会授权",
+      domain: "Compliance",
+      status: "urgent",
+      progress: 0.42,
+      milestones: { done: 5, total: 12 },
+      agentTasks: 3,
+      team: ["顾", "审计 王"],
+      starred: false,
+      mountedMcp: ["mcp-pkulaw"],
+      conversation: [],
+      fileTree: [
+        folder("01_举报材料(机密)", [
+          file("举报信(脱敏).pdf", "<h1>举报信</h1>", "📕"),
+        ]),
+        folder("02_证据梳理", [
+          file("时间线.md", "# 时间线\n\n- T-30: 内部审批流程异常\n- T-15: 关联方付款\n"),
+        ]),
+        folder("03_访谈记录", [
+          file("第一次访谈记录.docx", "<h1>访谈记录</h1>"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 5,
+      updatedAt: now() - 60 * 1000 * 60 * 3,
+    },
+  ];
+}
+
+function inHouseClipboard(userId: string): ClipboardItem[] {
+  return [
+    { id: uid("c"), userId, text: "本协议项下任何变更须经双方书面同意", source: "标准条款库", createdAt: now() - 5 * 60000 },
+    { id: uid("c"), userId, text: "《个人信息保护法》第二十一条", source: "北大法宝", createdAt: now() - 10 * 60000 },
+    { id: uid("c"), userId, text: "对外签字必须使用法人公章或经授权之合同章", source: "公司印章管理办法", createdAt: now() - 30 * 60000 },
+  ];
+}
+
+function inHouseSnippets(userId: string): SnippetItem[] {
+  return [
+    {
+      id: uid("s"), userId,
+      name: "审阅意见开头",
+      shortcut: "/review-head",
+      body: "{{department}}就贵部提交之《{{contract_name}}》出具如下审阅意见,请贵部酌情采纳。",
+      updatedAt: now(),
+    },
+    {
+      id: uid("s"), userId,
+      name: "合规风险标注",
+      shortcut: "/risk",
+      body: "**合规风险({{level}})——{{title}}:**",
+      updatedAt: now(),
+    },
+    {
+      id: uid("s"), userId,
+      name: "升级签报",
+      shortcut: "/escalate",
+      body: "鉴于本事项涉及{{topic}},建议提交至{{committee}}审议。",
+      updatedAt: now(),
+    },
+  ];
+}
+
+function inHouseVariables(userId: string): VariableItem[] {
+  return [
+    { id: uid("v"), userId, key: "company_name", value: "(贵公司全称)" },
+    { id: uid("v"), userId, key: "department", value: "法务部" },
+    { id: uid("v"), userId, key: "committee", value: "合规与风险委员会" },
+    { id: uid("v"), userId, key: "general_counsel", value: "总法律顾问" },
+  ];
+}
+
+function judiciaryProjects(userId: string): Project[] {
+  return [
+    {
+      id: uid("proj"),
+      userId,
+      name: "(2026)粤01民初XXXX号 · 一审承办",
+      client: "原告 张某 / 被告 某科技公司",
+      domain: "Arbitration",
+      status: "active",
+      progress: 0.62,
+      milestones: { done: 8, total: 13 },
+      agentTasks: 4,
+      team: ["承办 法官"],
+      starred: true,
+      mountedMcp: ["mcp-pkulaw", "mcp-wkinfo", "mcp-court-docs"],
+      conversation: [],
+      fileTree: [
+        folder("01_起诉与答辩", [
+          file("民事起诉状.pdf", "<h1>民事起诉状</h1>", "📕"),
+          file("被告答辩状.pdf", "<h1>答辩状</h1>", "📕"),
+        ]),
+        folder("02_证据卷宗", [
+          file("原告证据清单.xlsx", "<h1>证据清单</h1>", "📊"),
+          file("被告证据清单.xlsx", "<h1>证据清单</h1>", "📊"),
+        ]),
+        folder("03_庭审笔录", [
+          file("庭审笔录 · 第一次开庭.docx", "<h1>庭审笔录</h1>"),
+        ]),
+        folder("04_裁判文书", [
+          file("裁判文书初稿.docx",
+            "<h1>判决书(初稿)</h1><p class=\"doc-meta\">(2026)粤01民初XXXX号</p><h3>当事人</h3><p>原告:张某……</p><h3>本院查明</h3><p>(待补)</p>", "📄"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 30,
+      updatedAt: now() - 60 * 1000 * 25,
+    },
+    {
+      id: uid("proj"),
+      userId,
+      name: "类案检索 · 居住权纠纷",
+      client: "审判管理 / 业务指导",
+      domain: "IP",
+      status: "draft",
+      progress: 0.3,
+      milestones: { done: 3, total: 9 },
+      agentTasks: 2,
+      team: ["承办 法官", "助理"],
+      starred: false,
+      mountedMcp: ["mcp-wkinfo", "mcp-court-docs"],
+      conversation: [],
+      fileTree: [
+        folder("01_检索说明", [
+          file("检索范围与目的.md", "# 检索范围\n\n- 居住权设立后第三人善意取得\n- 2023-2026 各地法院"),
+        ]),
+        folder("02_类案", [
+          file("类案 1 · 北京一中院.pdf", "<h1>类案</h1>", "📕"),
+          file("类案 2 · 上海二中院.pdf", "<h1>类案</h1>", "📕"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 10,
+      updatedAt: now() - 86400000,
+    },
+  ];
+}
+
+function judiciaryClipboard(userId: string): ClipboardItem[] {
+  return [
+    { id: uid("c"), userId, text: "(2026)粤01民初XXXX号", source: "案件编号", createdAt: now() - 3 * 60000 },
+    { id: uid("c"), userId, text: "本院依法适用普通程序", source: "标准用语", createdAt: now() - 10 * 60000 },
+    { id: uid("c"), userId, text: "《民法典》第一千零四十二条", source: "北大法宝", createdAt: now() - 18 * 60000 },
+  ];
+}
+
+function judiciarySnippets(userId: string): SnippetItem[] {
+  return [
+    {
+      id: uid("s"), userId,
+      name: "本院查明",
+      shortcut: "/found",
+      body: "本院经审理查明:{{facts}}\n\n上述事实有下列证据证明:{{evidence}}",
+      updatedAt: now(),
+    },
+    {
+      id: uid("s"), userId,
+      name: "本院认为",
+      shortcut: "/hold",
+      body: "本院认为,本案争议焦点为{{issue}}。{{reasoning}}",
+      updatedAt: now(),
+    },
+    {
+      id: uid("s"), userId,
+      name: "判决主文",
+      shortcut: "/judgment",
+      body: "依照{{statutes}}之规定,判决如下:",
+      updatedAt: now(),
+    },
+  ];
+}
+
+function judiciaryVariables(userId: string): VariableItem[] {
+  return [
+    { id: uid("v"), userId, key: "case_no", value: "(2026)粤01民初XXXX号" },
+    { id: uid("v"), userId, key: "court_name", value: "广州市中级人民法院" },
+    { id: uid("v"), userId, key: "judge_name", value: "(承办法官)" },
+    { id: uid("v"), userId, key: "trial_date", value: "二〇二六年" },
+  ];
+}
+
+function otherProjects(userId: string): Project[] {
+  return [
+    {
+      id: uid("proj"),
+      userId,
+      name: "ICC 国际仲裁 · 仲裁庭工作",
+      client: "ICC Case No. 26XXX/EMT",
+      domain: "Arbitration",
+      status: "active",
+      progress: 0.5,
+      milestones: { done: 5, total: 10 },
+      agentTasks: 2,
+      team: ["仲裁员"],
+      starred: false,
+      mountedMcp: ["mcp-wkinfo", "mcp-arbitration-rules"],
+      conversation: [],
+      fileTree: [
+        folder("01_仲裁文件", [
+          file("Terms of Reference.docx", "<h1>Terms of Reference</h1>"),
+        ]),
+        folder("02_当事人提交", [
+          file("Claimant Memorial.pdf", "<h1>Claimant Memorial</h1>", "📕"),
+        ]),
+        folder("03_裁决草稿", [
+          file("Draft Award v1.docx", "<h1>Arbitral Award · Draft</h1>"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 60,
+      updatedAt: now() - 60 * 1000 * 60 * 6,
+    },
+    {
+      id: uid("proj"),
+      userId,
+      name: "学术研究 · 数据跨境流动比较法",
+      client: "(独立研究)",
+      domain: "Compliance",
+      status: "draft",
+      progress: 0.2,
+      milestones: { done: 1, total: 6 },
+      agentTasks: 1,
+      team: ["研究者"],
+      starred: false,
+      mountedMcp: ["mcp-pkulaw"],
+      conversation: [],
+      fileTree: [
+        folder("01_文献", [
+          file("GDPR Art.45 解读.md", "# GDPR Art.45\n\n…"),
+          file("PIPL 跨境制度梳理.md", "# PIPL 跨境\n\n…"),
+        ]),
+        folder("02_论文草稿", [
+          file("论文草稿 v1.docx", "<h1>论文草稿</h1>"),
+        ]),
+      ],
+      openFileIds: [],
+      activeFileId: null,
+      createdAt: now() - 86400000 * 21,
+      updatedAt: now() - 86400000 * 4,
+    },
+  ];
+}
+
+function otherClipboard(userId: string): ClipboardItem[] {
+  return [
+    { id: uid("c"), userId, text: "ICC Case No. 26XXX/EMT", source: "案件编号", createdAt: now() - 5 * 60000 },
+    { id: uid("c"), userId, text: "Article 22 ICC Rules of Arbitration", source: "ICC 规则", createdAt: now() - 12 * 60000 },
+  ];
+}
+
+function otherSnippets(userId: string): SnippetItem[] {
+  return [
+    {
+      id: uid("s"), userId,
+      name: "Arbitral Tribunal Section",
+      shortcut: "/at",
+      body: "The Arbitral Tribunal, having considered the submissions of the Parties, decides as follows:",
+      updatedAt: now(),
+    },
+    {
+      id: uid("s"), userId,
+      name: "Citation · 中英",
+      shortcut: "/cite",
+      body: "(See {{source}}, at {{para}}.)",
+      updatedAt: now(),
+    },
+  ];
+}
+
+function otherVariables(userId: string): VariableItem[] {
+  return [
+    { id: uid("v"), userId, key: "case_no", value: "ICC Case No. 26XXX/EMT" },
+    { id: uid("v"), userId, key: "tribunal", value: "Arbitral Tribunal" },
+    { id: uid("v"), userId, key: "seat", value: "Singapore" },
+  ];
+}
+
+/** Per-group seed bundle. The default (law-firm) preserves the existing demo. */
+export function seedForGroup(userId: string, group: UserGroup) {
+  switch (group) {
+    case "in-house":
+      return {
+        projects: inHouseProjects(userId),
+        clipboard: inHouseClipboard(userId),
+        snippets: inHouseSnippets(userId),
+        variables: inHouseVariables(userId),
+      };
+    case "judiciary":
+      return {
+        projects: judiciaryProjects(userId),
+        clipboard: judiciaryClipboard(userId),
+        snippets: judiciarySnippets(userId),
+        variables: judiciaryVariables(userId),
+      };
+    case "other":
+      return {
+        projects: otherProjects(userId),
+        clipboard: otherClipboard(userId),
+        snippets: otherSnippets(userId),
+        variables: otherVariables(userId),
+      };
+    case "law-firm":
+    default:
+      return {
+        projects: seedProjects(userId),
+        clipboard: seedClipboard(userId),
+        snippets: seedSnippets(userId),
+        variables: seedVariables(userId),
+      };
+  }
+}
+
+/** Default installed-skill list per group — gives each user relevant defaults. */
+export function defaultInstalledFor(group: UserGroup): string[] {
+  const base = ["mcp-pkulaw"];
+  switch (group) {
+    case "law-firm":
+      return [
+        ...base,
+        "mcp-wkinfo",
+        "mcp-samr",
+        "mcp-admin-penalty",
+        "contract-review-pro",
+        "spa-drafter",
+      ];
+    case "in-house":
+      return [
+        ...base,
+        "mcp-samr",
+        "mcp-admin-penalty",
+        "contract-review-pro",
+        "data-sanitization",
+        "related-party-tx",
+      ];
+    case "judiciary":
+      return [
+        ...base,
+        "mcp-court-docs",
+        "mcp-wkinfo",
+        "judgment-drafter",
+        "evidence-index",
+      ];
+    case "other":
+      return [...base, "mcp-wkinfo", "mcp-arbitration-rules", "legal-translate"];
+  }
+}
+
+/** Legacy alias: defaults to law-firm seed. Kept for migration code paths. */
 export function seedFor(userId: string) {
-  return {
-    projects: seedProjects(userId),
-    clipboard: seedClipboard(userId),
-    snippets: seedSnippets(userId),
-    variables: seedVariables(userId),
-  };
+  return seedForGroup(userId, "law-firm");
 }
 
 export const SEED = {

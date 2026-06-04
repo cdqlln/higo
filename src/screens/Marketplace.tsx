@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useStore } from "../store";
+import { useCurrentUser, useStore } from "../store";
 import { SKILL_CATALOG } from "../lib/skills";
-import type { SkillSource } from "../types";
+import { GROUP_LABEL } from "../types";
+import type { SkillSource, UserGroup } from "../types";
 
 const SOURCE_LABEL: Record<SkillSource, { txt: string; dot: string }> = {
   official: { txt: "官方", dot: "src-blue" },
@@ -16,11 +17,22 @@ export default function Marketplace() {
   const installed = useStore((s) => s.installedSkills);
   const install = useStore((s) => s.installSkill);
   const uninstall = useStore((s) => s.uninstallSkill);
+  const updateSettings = useStore((s) => s.updateSettings);
+  const settingsGroupFilter = useStore((s) => s.settings.marketplaceGroupFilter);
+  const user = useCurrentUser();
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [source, setSource] = useState<SkillSource | "all">("all");
   const [sort, setSort] = useState<Sort>("hot");
+  const [groupFilter, setGroupFilter] = useState<UserGroup | "all">(
+    settingsGroupFilter ?? user?.group ?? "all",
+  );
+
+  function setGroupAndPersist(g: UserGroup | "all") {
+    setGroupFilter(g);
+    updateSettings({ marketplaceGroupFilter: g });
+  }
 
   const featured = useMemo(() => SKILL_CATALOG.filter((s) => s.featured), []);
 
@@ -49,11 +61,16 @@ export default function Marketplace() {
     }
     if (category !== "all") list = list.filter((s) => s.category === category);
     if (source !== "all") list = list.filter((s) => s.source === source);
+    if (groupFilter !== "all") {
+      list = list.filter(
+        (s) => !s.userGroups || s.userGroups.includes(groupFilter),
+      );
+    }
     if (sort === "hot") list.sort((a, b) => b.installs - a.installs);
     else if (sort === "rating") list.sort((a, b) => b.rating - a.rating);
     else list.sort((a, b) => b.version.localeCompare(a.version));
     return list;
-  }, [q, category, source, sort]);
+  }, [q, category, source, sort, groupFilter]);
 
   const totalInstalls = SKILL_CATALOG.reduce((n, s) => n + s.installs, 0);
   const mcpCount = SKILL_CATALOG.filter((s) => s.kind === "mcp").length;
@@ -105,6 +122,33 @@ export default function Marketplace() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+          </div>
+
+          <div className="mk-side-group">
+            <div className="mk-side-title">适用群组</div>
+            <ul>
+              <li
+                className={groupFilter === "all" ? "active" : ""}
+                onClick={() => setGroupAndPersist("all")}
+              >
+                全部群组 <span>{SKILL_CATALOG.length}</span>
+              </li>
+              {(Object.keys(GROUP_LABEL) as UserGroup[]).map((g) => {
+                const n = SKILL_CATALOG.filter(
+                  (s) => !s.userGroups || s.userGroups.includes(g),
+                ).length;
+                return (
+                  <li
+                    key={g}
+                    className={groupFilter === g ? "active" : ""}
+                    onClick={() => setGroupAndPersist(g)}
+                  >
+                    {user?.group === g && <span className="for-you-dot">●</span>}
+                    {GROUP_LABEL[g]} <span>{n}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
           <div className="mk-side-group">
             <div className="mk-side-title">类型</div>
@@ -217,6 +261,21 @@ export default function Marketplace() {
                     </div>
                   </div>
                   <p className="mc-desc">{s.description}</p>
+                  {s.userGroups && s.userGroups.length < 4 && (
+                    <div className="mc-groups">
+                      适用于:
+                      {s.userGroups.map((g) => (
+                        <span
+                          key={g}
+                          className={
+                            "mc-group-chip" + (user?.group === g ? " mine" : "")
+                          }
+                        >
+                          {GROUP_LABEL[g]}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="mc-foot">
                     <span>★ {s.rating} · {(s.installs / 1000).toFixed(1)}k 安装</span>
                     <button

@@ -15,6 +15,7 @@ export const SKILL_CATALOG: Skill[] = [
     installs: 12402,
     version: "2.1.0",
     featured: true,
+    userGroups: ["law-firm", "in-house"],
     exposes: [
       {
         name: "skill.contract_review",
@@ -44,6 +45,7 @@ export const SKILL_CATALOG: Skill[] = [
     installs: 8217,
     version: "1.6.2",
     featured: true,
+    userGroups: ["law-firm", "in-house", "judiciary", "other"],
     exposes: [
       {
         name: "skill.sanitize",
@@ -73,6 +75,7 @@ export const SKILL_CATALOG: Skill[] = [
     installs: 5901,
     version: "0.9.4",
     featured: true,
+    userGroups: ["law-firm", "in-house"],
     exposes: [
       {
         name: "skill.browser_fetch",
@@ -99,6 +102,7 @@ export const SKILL_CATALOG: Skill[] = [
     installs: 9883,
     version: "3.0.1",
     featured: true,
+    userGroups: ["law-firm", "in-house", "judiciary"],
     exposes: [
       {
         name: "mcp.admin_penalty.search",
@@ -129,6 +133,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.8,
     installs: 14302,
     version: "5.2.0",
+    userGroups: ["law-firm", "in-house", "judiciary", "other"],
     exposes: [
       {
         name: "mcp.pkulaw.lookup_statute",
@@ -156,6 +161,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.8,
     installs: 7611,
     version: "2.4.1",
+    userGroups: ["law-firm", "in-house"],
     exposes: [
       {
         name: "mcp.samr.lookup_entity",
@@ -180,6 +186,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.7,
     installs: 6840,
     version: "1.8.0",
+    userGroups: ["law-firm", "judiciary", "other"],
     exposes: [
       {
         name: "mcp.wkinfo.search_cases",
@@ -208,6 +215,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.8,
     installs: 3214,
     version: "1.4.0",
+    userGroups: ["law-firm"],
   },
   {
     id: "related-party-tx",
@@ -221,6 +229,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.7,
     installs: 2811,
     version: "1.2.1",
+    userGroups: ["law-firm", "in-house"],
   },
   {
     id: "spa-drafter",
@@ -234,6 +243,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.9,
     installs: 4112,
     version: "2.0.3",
+    userGroups: ["law-firm"],
   },
   {
     id: "legal-translate",
@@ -247,6 +257,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.7,
     installs: 6803,
     version: "3.1.0",
+    userGroups: ["law-firm", "in-house", "judiciary", "other"],
   },
   {
     id: "financial-skim",
@@ -260,6 +271,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.6,
     installs: 2110,
     version: "0.9.2",
+    userGroups: ["law-firm", "in-house"],
   },
   {
     id: "evidence-index",
@@ -273,6 +285,7 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.5,
     installs: 1402,
     version: "0.6.0",
+    userGroups: ["law-firm", "judiciary"],
   },
   {
     id: "charter-diff",
@@ -286,6 +299,178 @@ export const SKILL_CATALOG: Skill[] = [
     rating: 4.8,
     installs: 1903,
     version: "1.1.0",
+    userGroups: ["law-firm", "in-house"],
+  },
+
+  /* ============================================
+   * 司法工作者专属
+   * ============================================ */
+  {
+    id: "mcp-court-docs",
+    name: "中国裁判文书网",
+    author: "最高人民法院 / 公开数据",
+    source: "official",
+    kind: "mcp",
+    icon: "⚖",
+    category: "检索 · MCP",
+    description: "按案号、当事人、法律关系、审判组织检索全国裁判文书;支持引文格式输出。",
+    rating: 4.9,
+    installs: 6201,
+    version: "2.1.0",
+    userGroups: ["judiciary", "law-firm"],
+    exposes: [
+      {
+        name: "mcp.court_docs.search",
+        description:
+          "Search court judgment documents by keyword / case type / court level / year.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            keywords: { type: "string" },
+            court: { type: "string" },
+            year: { type: "integer" },
+          },
+          required: ["keywords"],
+        },
+      },
+    ],
+  },
+  {
+    id: "judgment-drafter",
+    name: "裁判文书起草助手",
+    author: "司法 AI 实验室",
+    source: "labs",
+    kind: "skill",
+    icon: "📜",
+    category: "文书起草",
+    description:
+      '按照法院文书规范生成判决书 / 裁定书初稿,自动套入「本院查明 / 本院认为 / 判决主文」结构。',
+    rating: 4.7,
+    installs: 1840,
+    version: "1.3.0",
+    userGroups: ["judiciary"],
+  },
+  {
+    id: "evidence-chain",
+    name: "证据链可视化",
+    author: "司法 AI 实验室",
+    source: "labs",
+    kind: "skill",
+    icon: "🔗",
+    category: "实务工作流",
+    description: "解析卷宗证据,自动构建时间线与逻辑链路图,识别证据缺口。",
+    rating: 4.6,
+    installs: 1120,
+    version: "0.8.4",
+    userGroups: ["judiciary", "law-firm"],
+  },
+
+  /* ============================================
+   * 公司法务专属
+   * ============================================ */
+  {
+    id: "internal-clause-lib",
+    name: "内部条款标准库",
+    author: "官方",
+    source: "official",
+    kind: "skill",
+    icon: "📚",
+    category: "合同审阅",
+    description: "对接公司内部条款标准库,实时比对待审合同与公司标准条款的偏离,出具修订建议。",
+    rating: 4.7,
+    installs: 2240,
+    version: "1.5.0",
+    userGroups: ["in-house"],
+  },
+  {
+    id: "esg-compliance",
+    name: "ESG / 反舞弊合规",
+    author: "合规研究院",
+    source: "partner",
+    kind: "skill",
+    icon: "🌱",
+    category: "合规检查",
+    description:
+      "按 ISO 37301 / 反舞弊指引 / ESG 披露要求,自动生成合规年审清单与高风险事项排查报告。",
+    rating: 4.6,
+    installs: 1503,
+    version: "1.1.0",
+    userGroups: ["in-house"],
+  },
+  {
+    id: "internal-investigation",
+    name: "内部调查工作包",
+    author: "官方",
+    source: "official",
+    kind: "skill",
+    icon: "🔍",
+    category: "实务工作流",
+    description: "包含访谈记录模板、证据保全清单、调查报告框架;支持脱敏导出。",
+    rating: 4.5,
+    installs: 980,
+    version: "0.9.0",
+    userGroups: ["in-house"],
+  },
+
+  /* ============================================
+   * 其它专业(仲裁员、学者等)
+   * ============================================ */
+  {
+    id: "mcp-arbitration-rules",
+    name: "仲裁规则与机构库",
+    author: "国际仲裁实践研究",
+    source: "partner",
+    kind: "mcp",
+    icon: "🏛",
+    category: "检索 · MCP",
+    description:
+      "ICC / SIAC / HKIAC / CIETAC / LCIA / ICSID 等主要仲裁规则、机构费率、典型案例。",
+    rating: 4.8,
+    installs: 1822,
+    version: "1.4.0",
+    userGroups: ["other", "law-firm"],
+    exposes: [
+      {
+        name: "mcp.arbitration.lookup_rule",
+        description: "Look up a specific arbitration rule article from the named institution.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            institution: { type: "string", description: "ICC / SIAC / HKIAC / CIETAC ..." },
+            article: { type: "string" },
+          },
+          required: ["institution", "article"],
+        },
+      },
+    ],
+  },
+  {
+    id: "comparative-law",
+    name: "比较法检索助手",
+    author: "学术合作",
+    source: "community",
+    kind: "skill",
+    icon: "🌐",
+    category: "检索",
+    description: "跨法域检索同一法律问题在不同司法管辖区的处理路径,适用于学术与跨境业务。",
+    rating: 4.4,
+    installs: 760,
+    version: "0.7.0",
+    userGroups: ["other", "law-firm"],
+  },
+  {
+    id: "notary-template",
+    name: "公证文书模板包",
+    author: "司法部公证业务指导",
+    source: "official",
+    kind: "skill",
+    icon: "📑",
+    category: "文书起草",
+    description: "按公证业务类型(继承、委托、合同、声明)套用标准公证文书模板。",
+    rating: 4.6,
+    installs: 540,
+    version: "1.0.2",
+    userGroups: ["other"],
   },
 ];
 

@@ -14,7 +14,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { uid } from "../lib/id";
-import { SEED, seedFor } from "./seed";
+import { SEED, defaultInstalledFor, seedForGroup } from "./seed";
 import { generateSalt, hashPassword, verifyPassword } from "../lib/auth";
 import type {
   Account,
@@ -27,6 +27,7 @@ import type {
   SnippetItem,
   TreeNode,
   ToolCall,
+  UserGroup,
   VariableItem,
 } from "../types";
 
@@ -51,8 +52,9 @@ interface StoreState {
     email: string;
     password: string;
     name: string;
-    firm?: string;
-    role?: Role;
+    group: UserGroup;
+    role: Role;
+    organization?: string;
     seedDemo?: boolean;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
   login: (
@@ -193,13 +195,22 @@ export const useStore = create<StoreState>()(
           name: input.name.trim() || email.split("@")[0],
           passwordHash,
           passwordSalt: salt,
-          role: input.role ?? "lawyer",
-          firm: input.firm,
+          group: input.group,
+          role: input.role,
+          organization: input.organization,
           avatar: initials,
           createdAt: Date.now(),
           lastSeenAt: Date.now(),
         };
-        const seed = input.seedDemo ? seedFor(id) : null;
+        const seed = input.seedDemo ? seedForGroup(id, input.group) : null;
+        // Replace installedSkills with group defaults on first-ever account; on
+        // additional accounts, augment (union) so prior users still see their picks.
+        const isFirstUser = get().accounts.length === 0;
+        const groupDefaults = defaultInstalledFor(input.group);
+        const nextInstalled = isFirstUser
+          ? groupDefaults
+          : Array.from(new Set([...get().installedSkills, ...groupDefaults]));
+
         set({
           accounts: [...get().accounts, account],
           currentUserId: id,
@@ -207,7 +218,12 @@ export const useStore = create<StoreState>()(
           clipboard: seed ? [...get().clipboard, ...seed.clipboard] : get().clipboard,
           snippets: seed ? [...get().snippets, ...seed.snippets] : get().snippets,
           variables: seed ? [...get().variables, ...seed.variables] : get().variables,
-          settings: { ...get().settings, agentTitle: account.name },
+          installedSkills: nextInstalled,
+          settings: {
+            ...get().settings,
+            agentTitle: account.name,
+            marketplaceGroupFilter: input.group,
+          },
         });
         get().pushToast(`欢迎,${account.name}`, "ok");
         return { ok: true };
@@ -600,7 +616,9 @@ export const useStore = create<StoreState>()(
           });
         } else {
           // Logged in: reset only the current user's data, leave other accounts intact
-          const seed = seedFor(userId);
+          const account = get().accounts.find((a) => a.id === userId);
+          const group = account?.group ?? "law-firm";
+          const seed = seedForGroup(userId, group);
           set({
             projects: [
               ...get().projects.filter((p) => p.userId !== userId),
@@ -627,7 +645,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: "workdeck-v1",
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown, fromVersion: number) => {
         const p = persisted as Partial<StoreState> & {
           projects?: Project[];
@@ -649,6 +667,7 @@ export const useStore = create<StoreState>()(
             name: "Legacy Demo",
             passwordHash: "",
             passwordSalt: "",
+            group: "law-firm",
             role: "lawyer",
             avatar: "L",
             createdAt: Date.now(),
@@ -657,12 +676,25 @@ export const useStore = create<StoreState>()(
           return {
             ...(p as object),
             accounts: [legacyAccount],
-            currentUserId: null, // force a fresh login
+            currentUserId: null,
             projects: stamp(p.projects),
             clipboard: stamp(p.clipboard),
             snippets: stamp(p.snippets),
             variables: stamp(p.variables),
           } as unknown as StoreState;
+        }
+        if (fromVersion < 3) {
+          // v2 → v3: accounts now require `group` and may carry `organization`
+          // (legacy `firm` field rolls in).
+          const s = persisted as {
+            accounts?: (Account & { firm?: string })[];
+          };
+          const upd = (s.accounts ?? []).map((a) => ({
+            ...a,
+            group: a.group ?? ("law-firm" as UserGroup),
+            organization: a.organization ?? a.firm,
+          }));
+          return { ...(persisted as object), accounts: upd } as unknown as StoreState;
         }
         return persisted as StoreState;
       },
