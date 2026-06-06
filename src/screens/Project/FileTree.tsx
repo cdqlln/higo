@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../../store";
 import { skillById } from "../../lib/skills";
 import type { Project, TreeNode } from "../../types";
+
+const NODE_MIME = "application/x-workdeck-node";
 
 export default function FileTree({ project }: { project: Project }) {
   const openFile = useStore((s) => s.openFile);
@@ -10,8 +12,14 @@ export default function FileTree({ project }: { project: Project }) {
   const renameNode = useStore((s) => s.renameNode);
   const deleteNode = useStore((s) => s.deleteNode);
   const uploadFiles = useStore((s) => s.uploadFiles);
+  const moveNode = useStore((s) => s.moveNode);
+  const duplicateNode = useStore((s) => s.duplicateNode);
+  const treeClipboard = useStore((s) => s.treeClipboard);
+  const setTreeClipboard = useStore((s) => s.setTreeClipboard);
+  const pasteTreeClipboard = useStore((s) => s.pasteTreeClipboard);
   const toggleProjectMcp = useStore((s) => s.toggleProjectMcp);
   const installed = useStore((s) => s.installedSkills);
+  const pushToast = useStore((s) => s.pushToast);
 
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState<{ nodeId: string | null; x: number; y: number } | null>(null);
@@ -19,8 +27,15 @@ export default function FileTree({ project }: { project: Project }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const treeRef = useRef<HTMLElement>(null);
   const [uploadParent, setUploadParent] = useState<string | null>(null);
+
+  const clipboardForMe =
+    treeClipboard && treeClipboard.projectId === project.id ? treeClipboard : null;
+  const canPaste = clipboardForMe !== null;
 
   async function handleFiles(files: FileList | File[], parentId: string | null) {
     setUploading(true);
@@ -30,6 +45,57 @@ export default function FileTree({ project }: { project: Project }) {
       setUploading(false);
     }
   }
+
+  // --- Keyboard shortcuts when this panel has focus ---
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!selectedId) return;
+      const inEditable =
+        document.activeElement instanceof HTMLElement &&
+        (document.activeElement.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName));
+      if (inEditable) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if ((e.key === "Delete" || e.key === "Backspace") && !mod) {
+        e.preventDefault();
+        if (confirm("确定删除该项?")) {
+          deleteNode(project.id, selectedId);
+          setSelectedId(null);
+        }
+      } else if (mod && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        setTreeClipboard({ projectId: project.id, nodeId: selectedId, mode: "copy" });
+        pushToast("已复制 · 用 ⌘V 粘贴", "ok");
+      } else if (mod && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        setTreeClipboard({ projectId: project.id, nodeId: selectedId, mode: "cut" });
+        pushToast("已剪切 · 用 ⌘V 粘贴", "ok");
+      } else if (mod && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        // Paste into selected folder if it's a folder, else into root
+        const sel = findById(project.fileTree, selectedId);
+        const target =
+          sel && sel.type === "folder" ? sel.id : null;
+        const r = pasteTreeClipboard(target);
+        if (!r.ok) pushToast(r.error ?? "粘贴失败", "warn");
+      } else if (mod && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        const id = duplicateNode(project.id, selectedId);
+        if (id) pushToast("已原地复制一份", "ok");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    selectedId,
+    project.id,
+    project.fileTree,
+    deleteNode,
+    duplicateNode,
+    pasteTreeClipboard,
+    pushToast,
+    setTreeClipboard,
+  ]);
 
   // Filter that keeps folders that contain a matching child
   function filterTree(nodes: TreeNode[]): TreeNode[] {
@@ -60,6 +126,9 @@ export default function FileTree({ project }: { project: Project }) {
     const isFolder = n.type === "folder";
     const isActive = n.id === project.activeFileId;
     const isDropOver = dropTarget === n.id && isFolder;
+    const isSelected = selectedId === n.id;
+    const isDragging = draggingId === n.id;
+    const isCut = clipboardForMe?.mode === "cut" && clipboardForMe.nodeId === n.id;
     return (
       <li
         key={n.id}
@@ -67,27 +136,48 @@ export default function FileTree({ project }: { project: Project }) {
           (isFolder ? "ft-folder" : "ft-file") +
           (isFolder && n.open ? " open" : "") +
           (isActive ? " active" : "") +
-          (isDropOver ? " drop-target" : "")
+          (isDropOver ? " drop-target" : "") +
+          (isSelected ? " selected" : "") +
+          (isDragging ? " dragging" : "") +
+          (isCut ? " cut" : "")
         }
       >
         <div
           className="ft-row"
           style={{ paddingLeft: 8 + depth * 12 }}
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            setDraggingId(n.id);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData(NODE_MIME, n.id);
+            e.dataTransfer.setData("text/plain", n.name);
+          }}
+          onDragEnd={() => {
+            setDraggingId(null);
+            setDropTarget(null);
+          }}
           onClick={() => {
+            setSelectedId(n.id);
             if (isFolder) toggleFolder(project.id, n.id);
             else openFile(project.id, n.id);
           }}
           onContextMenu={(e) => {
             e.preventDefault();
+            setSelectedId(n.id);
             setMenu({ nodeId: n.id, x: e.clientX, y: e.clientY });
           }}
           onDragOver={
             isFolder
               ? (e) => {
-                  if (e.dataTransfer.types.includes("Files")) {
+                  const types = e.dataTransfer.types;
+                  if (types.includes("Files") || types.includes(NODE_MIME)) {
                     e.preventDefault();
                     e.stopPropagation();
                     setDropTarget(n.id);
+                    e.dataTransfer.dropEffect = types.includes("Files")
+                      ? "copy"
+                      : "move";
                   }
                 }
               : undefined
@@ -96,6 +186,16 @@ export default function FileTree({ project }: { project: Project }) {
           onDrop={
             isFolder
               ? (e) => {
+                  const innerNode = e.dataTransfer.getData(NODE_MIME);
+                  if (innerNode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTarget(null);
+                    setDragOver(false);
+                    moveNode(project.id, innerNode, n.id);
+                    setDraggingId(null);
+                    return;
+                  }
                   if (e.dataTransfer.files.length > 0) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -148,18 +248,31 @@ export default function FileTree({ project }: { project: Project }) {
 
   return (
     <aside
+      ref={treeRef}
       className={"ide-filetree" + (dragOver ? " drag-over" : "")}
+      tabIndex={-1}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("Files")) {
+        const types = e.dataTransfer.types;
+        if (types.includes("Files") || types.includes(NODE_MIME)) {
           e.preventDefault();
-          setDragOver(true);
+          if (types.includes("Files")) setDragOver(true);
         }
       }}
       onDragLeave={(e) => {
-        // Only clear when leaving the panel boundary
         if (e.currentTarget === e.target) setDragOver(false);
       }}
       onDrop={(e) => {
+        const innerNode = e.dataTransfer.getData(NODE_MIME);
+        if (innerNode) {
+          // Only treat as root-drop if landed on the panel itself, not bubbled
+          // up from a folder (folder handler does its own move).
+          e.preventDefault();
+          setDragOver(false);
+          setDropTarget(null);
+          moveNode(project.id, innerNode, null);
+          setDraggingId(null);
+          return;
+        }
         if (e.dataTransfer.files.length > 0) {
           e.preventDefault();
           setDragOver(false);
@@ -260,47 +373,108 @@ export default function FileTree({ project }: { project: Project }) {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={[
-            {
-              label: "上传文件到此处...",
+          items={(() => {
+            const node = menu.nodeId
+              ? findById(project.fileTree, menu.nodeId)
+              : null;
+            const isFolder = node?.type === "folder";
+            const items: {
+              label: string;
+              onClick: () => void;
+              danger?: boolean;
+              disabled?: boolean;
+              divider?: boolean;
+            }[] = [];
+            if (isFolder || node === null) {
+              items.push({
+                label: "上传文件到此处...",
+                onClick: () => {
+                  setUploadParent(menu.nodeId);
+                  fileInputRef.current?.click();
+                },
+              });
+              items.push({
+                label: "新建文件",
+                onClick: () => {
+                  const name = prompt("文件名:", "新文件.docx");
+                  if (name?.trim())
+                    createNode(project.id, menu.nodeId, {
+                      type: "file",
+                      name: name.trim(),
+                    });
+                },
+              });
+              items.push({
+                label: "新建子文件夹",
+                onClick: () => {
+                  const name = prompt("文件夹名:", "新建文件夹");
+                  if (name?.trim())
+                    createNode(project.id, menu.nodeId, {
+                      type: "folder",
+                      name: name.trim(),
+                    });
+                },
+              });
+              items.push({ label: "", onClick: () => {}, divider: true });
+            }
+            if (node) {
+              items.push({
+                label: "复制  ⌘C",
+                onClick: () => {
+                  setTreeClipboard({
+                    projectId: project.id,
+                    nodeId: node.id,
+                    mode: "copy",
+                  });
+                  pushToast("已复制", "ok");
+                },
+              });
+              items.push({
+                label: "剪切  ⌘X",
+                onClick: () => {
+                  setTreeClipboard({
+                    projectId: project.id,
+                    nodeId: node.id,
+                    mode: "cut",
+                  });
+                  pushToast("已剪切 · 粘贴位置后会移动", "ok");
+                },
+              });
+            }
+            items.push({
+              label: canPaste ? "粘贴  ⌘V" : "粘贴(剪贴板为空)",
+              disabled: !canPaste,
               onClick: () => {
-                setUploadParent(menu.nodeId);
-                fileInputRef.current?.click();
+                const target = isFolder ? menu.nodeId : null;
+                const r = pasteTreeClipboard(target);
+                if (!r.ok) pushToast(r.error ?? "粘贴失败", "warn");
               },
-            },
-            {
-              label: "新建文件",
-              onClick: () => {
-                const name = prompt("文件名:", "新文件.docx");
-                if (name?.trim())
-                  createNode(project.id, menu.nodeId, { type: "file", name: name.trim() });
-              },
-            },
-            {
-              label: "新建子文件夹",
-              onClick: () => {
-                const name = prompt("文件夹名:", "新建文件夹");
-                if (name?.trim())
-                  createNode(project.id, menu.nodeId, { type: "folder", name: name.trim() });
-              },
-            },
-            {
-              label: "重命名",
-              onClick: () => {
-                if (menu.nodeId) {
-                  const node = findById(project.fileTree, menu.nodeId);
-                  if (node) setRename({ id: node.id, value: node.name });
-                }
-              },
-            },
-            {
-              label: "删除",
-              danger: true,
-              onClick: () => {
-                if (menu.nodeId && confirm("确定删除?")) deleteNode(project.id, menu.nodeId);
-              },
-            },
-          ]}
+            });
+            if (node) {
+              items.push({
+                label: "原地复制一份  ⌘D",
+                onClick: () => {
+                  duplicateNode(project.id, node.id);
+                  pushToast("已复制一份", "ok");
+                },
+              });
+              items.push({ label: "", onClick: () => {}, divider: true });
+              items.push({
+                label: "重命名",
+                onClick: () => {
+                  setRename({ id: node.id, value: node.name });
+                },
+              });
+              items.push({
+                label: "删除  Del",
+                danger: true,
+                onClick: () => {
+                  if (confirm("确定删除?")) deleteNode(project.id, node.id);
+                },
+              });
+            }
+            return items;
+          })()}
           onClose={() => setMenu(null)}
         />
       )}
@@ -327,25 +501,48 @@ function ContextMenu({
 }: {
   x: number;
   y: number;
-  items: { label: string; onClick: () => void; danger?: boolean }[];
+  items: {
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+    disabled?: boolean;
+    divider?: boolean;
+  }[];
   onClose: () => void;
 }) {
   return (
     <>
-      <div className="ctx-backdrop" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div
+        className="ctx-backdrop"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
       <div className="ctx-menu" style={{ left: x, top: y }}>
-        {items.map((it, i) => (
-          <button
-            key={i}
-            className={"ctx-item" + (it.danger ? " danger" : "")}
-            onClick={() => {
-              it.onClick();
-              onClose();
-            }}
-          >
-            {it.label}
-          </button>
-        ))}
+        {items.map((it, i) =>
+          it.divider ? (
+            <div key={i} className="ctx-divider" />
+          ) : (
+            <button
+              key={i}
+              className={
+                "ctx-item" +
+                (it.danger ? " danger" : "") +
+                (it.disabled ? " disabled" : "")
+              }
+              disabled={it.disabled}
+              onClick={() => {
+                if (it.disabled) return;
+                it.onClick();
+                onClose();
+              }}
+            >
+              {it.label}
+            </button>
+          ),
+        )}
       </div>
     </>
   );

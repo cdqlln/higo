@@ -89,6 +89,24 @@ interface StoreState {
     parentId: string | null,
     files: FileList | File[],
   ) => Promise<{ ok: number; failed: { name: string; error: string }[] }>;
+  /** Move a node to a new parent (null = root). No-op if cycle would form. */
+  moveNode: (
+    projectId: string,
+    nodeId: string,
+    newParentId: string | null,
+  ) => { ok: boolean; error?: string };
+  /** Insert a deep copy of nodeId at the given parent. New IDs everywhere. */
+  duplicateNode: (
+    projectId: string,
+    nodeId: string,
+    parentId?: string | null,
+  ) => string | null;
+  /** In-memory clipboard used by copy / cut / paste — not persisted. */
+  treeClipboard: { projectId: string; nodeId: string; mode: "copy" | "cut" } | null;
+  setTreeClipboard: (
+    c: { projectId: string; nodeId: string; mode: "copy" | "cut" } | null,
+  ) => void;
+  pasteTreeClipboard: (parentId: string | null) => { ok: boolean; error?: string };
 
   /* ---------- Agent ---------- */
   appendMessage: (projectId: string, msg: AgentMessage) => void;
@@ -157,6 +175,72 @@ function removeNode(tree: TreeNode[], id: string): TreeNode[] {
     .map((n) =>
       n.children ? { ...n, children: removeNode(n.children, id) } : n,
     );
+}
+
+/** Extract a node out of the tree, returning [treeWithoutNode, extractedNode]. */
+function extractNode(
+  tree: TreeNode[],
+  id: string,
+): { tree: TreeNode[]; extracted: TreeNode | null } {
+  let extracted: TreeNode | null = null;
+  const walk = (nodes: TreeNode[]): TreeNode[] => {
+    const out: TreeNode[] = [];
+    for (const n of nodes) {
+      if (n.id === id) {
+        extracted = n;
+        continue;
+      }
+      out.push(n.children ? { ...n, children: walk(n.children) } : n);
+    }
+    return out;
+  };
+  return { tree: walk(tree), extracted };
+}
+
+/** Insert a node under a target folder; if parentId is null, push to root. */
+function insertUnder(
+  tree: TreeNode[],
+  parentId: string | null,
+  node: TreeNode,
+): TreeNode[] {
+  if (parentId === null) return [...tree, node];
+  return tree.map((n) => {
+    if (n.id === parentId && n.type === "folder") {
+      return { ...n, open: true, children: [...(n.children ?? []), node] };
+    }
+    if (n.children) return { ...n, children: insertUnder(n.children, parentId, node) };
+    return n;
+  });
+}
+
+/** Does `n` contain `id` somewhere in its descendants (or itself)? */
+function nodeContains(n: TreeNode, id: string): boolean {
+  if (n.id === id) return true;
+  return (n.children ?? []).some((c) => nodeContains(c, id));
+}
+
+/** Deep-clone a node with fresh ids throughout. */
+function cloneNodeDeep(n: TreeNode): TreeNode {
+  return {
+    ...n,
+    id: uid(n.type === "folder" ? "d" : "f"),
+    children: n.children ? n.children.map(cloneNodeDeep) : undefined,
+    updatedAt: Date.now(),
+  };
+}
+
+/** Append " 副本" / " 副本 (2)" to a name, before the extension if any. */
+function renamedForCopy(name: string): string {
+  const m = name.match(/^(.+?)(\.[^.]+)?$/);
+  if (!m) return name + " 副本";
+  const stem = m[1] ?? name;
+  const ext = m[2] ?? "";
+  const tail = /副本(?:\s*\((\d+)\))?$/.exec(stem);
+  if (tail) {
+    const n = tail[1] ? parseInt(tail[1], 10) + 1 : 2;
+    return stem.replace(/副本(?:\s*\(\d+\))?$/, `副本 (${n})`) + ext;
+  }
+  return `${stem} 副本${ext}`;
 }
 
 function fileIcon(name: string): string {
@@ -465,6 +549,79 @@ export const useStore = create<StoreState>()(
             p.id === projectId ? { ...p, activeFileId: nodeId } : p,
           ),
         });
+      },
+
+      moveNode: (projectId, nodeId, newParentId) => {
+        const project = get().projects.find((p) => p.id === projectId);
+        if (!project) return { ok: false, error: "project not found" };
+        const { tree, extracted } = extractNode(project.fileTree, nodeId);
+        if (!extracted) return { ok: false, error: "node not found" };
+        if (newParentId && nodeContains(extracted, newParentId)) {
+          get().pushToast("不能把文件夹移动到自身或其子目录中", "warn");
+          return { ok: false, error: "would-create-cycle" };
+        }
+        // No-op if dropping a node onto its existing parent at the root
+        // (we approximate via id check)
+        if (newParentId === extracted.id) {
+          return { ok: false, error: "self" };
+        }
+        const next = insertUnder(tree, newParentId, extracted);
+        set({
+          projects: get().projects.map((p) =>
+            p.id === projectId ? { ...p, fileTree: next, updatedAt: Date.now() } : p,
+          ),
+        });
+        return { ok: true };
+      },
+
+      duplicateNode: (projectId, nodeId, parentId = undefined) => {
+        const project = get().projects.find((p) => p.id === projectId);
+        if (!project) return null;
+        // Find source + locate its current parent (to default insert there)
+        let source: TreeNode | null = null;
+        let containingParent: string | null = null;
+        function walk(nodes: TreeNode[], parent: string | null) {
+          for (const n of nodes) {
+            if (n.id === nodeId) {
+              source = n;
+              containingParent = parent;
+              return;
+            }
+            if (n.children) walk(n.children, n.id);
+          }
+        }
+        walk(project.fileTree, null);
+        if (!source) return null;
+        const copy = cloneNodeDeep(source);
+        copy.name = renamedForCopy(copy.name);
+        const targetParent = parentId === undefined ? containingParent : parentId;
+        set({
+          projects: get().projects.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  fileTree: insertUnder(p.fileTree, targetParent, copy),
+                  updatedAt: Date.now(),
+                }
+              : p,
+          ),
+        });
+        return copy.id;
+      },
+
+      treeClipboard: null,
+      setTreeClipboard: (c) => set({ treeClipboard: c }),
+      pasteTreeClipboard: (parentId) => {
+        const clip = get().treeClipboard;
+        if (!clip) return { ok: false, error: "empty" };
+        if (clip.mode === "cut") {
+          const r = get().moveNode(clip.projectId, clip.nodeId, parentId);
+          if (r.ok) set({ treeClipboard: null });
+          return r;
+        }
+        // copy mode
+        const id = get().duplicateNode(clip.projectId, clip.nodeId, parentId);
+        return id ? { ok: true } : { ok: false, error: "source-gone" };
       },
 
       uploadFiles: async (projectId, parentId, files) => {

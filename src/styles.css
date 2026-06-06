@@ -862,6 +862,32 @@ mark { background: rgba(212, 175, 106, 0.18); color: var(--accent); padding: 0 4
 }
 
 /* =============================================
+   FILE TREE — internal drag, selection, cut/copy
+   ============================================= */
+.ft-folder.selected > .ft-row,
+.ft-file.selected > .ft-row {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.ft-folder.dragging > .ft-row,
+.ft-file.dragging > .ft-row { opacity: 0.4; }
+.ft-folder.cut > .ft-row,
+.ft-file.cut > .ft-row { opacity: 0.5; font-style: italic; }
+.ft-folder.cut > .ft-row::before,
+.ft-file.cut > .ft-row::before {
+  content: "✂";
+  position: absolute;
+  right: 8px;
+  font-size: 10px;
+  color: var(--accent);
+}
+.ft-row { position: relative; }
+
+.ctx-divider { height: 1px; background: var(--border); margin: 4px 6px; }
+.ctx-item.disabled { color: var(--text-3); cursor: default; opacity: 0.55; }
+.ctx-item.disabled:hover { background: transparent; color: var(--text-3); }
+
+/* =============================================
    FILE UPLOAD (drag-drop + binary viewer)
    ============================================= */
 .ide-filetree { position: relative; }
