@@ -136,8 +136,14 @@ export interface TreeNode {
   id: string;
   type: "folder" | "file";
   name: string;
-  /** for files: rich-text HTML content */
+  /** for text files: rich-text HTML / markdown / json text */
   content?: string;
+  /** for non-text files: data URL (`data:mime/type;base64,...`) */
+  binaryData?: string;
+  /** MIME type as reported at upload time */
+  mimeType?: string;
+  /** size in bytes */
+  size?: number;
   /** for folders: nested children */
   children?: TreeNode[];
   /** UI: folder open state */

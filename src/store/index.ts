@@ -16,6 +16,7 @@ import { useShallow } from "zustand/react/shallow";
 import { uid } from "../lib/id";
 import { SEED, defaultInstalledFor, seedForGroup } from "./seed";
 import { generateSalt, hashPassword, verifyPassword } from "../lib/auth";
+import { WARN_FILE_BYTES, fileIconFor, formatBytes, readFile } from "../lib/upload";
 import type {
   Account,
   AgentMessage,
@@ -83,6 +84,11 @@ interface StoreState {
   openFile: (projectId: string, nodeId: string) => void;
   closeFile: (projectId: string, nodeId: string) => void;
   setActiveFile: (projectId: string, nodeId: string | null) => void;
+  uploadFiles: (
+    projectId: string,
+    parentId: string | null,
+    files: FileList | File[],
+  ) => Promise<{ ok: number; failed: { name: string; error: string }[] }>;
 
   /* ---------- Agent ---------- */
   appendMessage: (projectId: string, msg: AgentMessage) => void;
@@ -459,6 +465,94 @@ export const useStore = create<StoreState>()(
             p.id === projectId ? { ...p, activeFileId: nodeId } : p,
           ),
         });
+      },
+
+      uploadFiles: async (projectId, parentId, files) => {
+        const list = Array.from(files);
+        let ok = 0;
+        const failed: { name: string; error: string }[] = [];
+        const newNodes: TreeNode[] = [];
+        const openIds: string[] = [];
+
+        for (const f of list) {
+          try {
+            const u = await readFile(f);
+            if (u.size > WARN_FILE_BYTES) {
+              get().pushToast(
+                `${u.name} 较大(${formatBytes(u.size)})· 可能影响存储`,
+                "warn",
+              );
+            }
+            const id = uid("f");
+            newNodes.push({
+              id,
+              type: "file",
+              name: u.name,
+              content: u.content,
+              binaryData: u.binaryData,
+              mimeType: u.mimeType,
+              size: u.size,
+              icon: fileIconFor(u.kind, u.name),
+              updatedAt: Date.now(),
+            });
+            openIds.push(id);
+            ok++;
+          } catch (e) {
+            failed.push({ name: f.name, error: (e as Error).message });
+            get().pushToast((e as Error).message, "warn");
+          }
+        }
+
+        if (newNodes.length > 0) {
+          set({
+            projects: get().projects.map((p) => {
+              if (p.id !== projectId) return p;
+              if (parentId === null) {
+                return {
+                  ...p,
+                  fileTree: [...p.fileTree, ...newNodes],
+                  openFileIds: Array.from(new Set([...p.openFileIds, openIds[0]])),
+                  activeFileId: openIds[0] ?? p.activeFileId,
+                  updatedAt: Date.now(),
+                };
+              }
+              const insert = (nodes: TreeNode[]): TreeNode[] =>
+                nodes.map((n) => {
+                  if (n.id === parentId && n.type === "folder") {
+                    return {
+                      ...n,
+                      open: true,
+                      children: [...(n.children ?? []), ...newNodes],
+                    };
+                  }
+                  if (n.children) return { ...n, children: insert(n.children) };
+                  return n;
+                });
+              return {
+                ...p,
+                fileTree: insert(p.fileTree),
+                openFileIds: Array.from(new Set([...p.openFileIds, openIds[0]])),
+                activeFileId: openIds[0] ?? p.activeFileId,
+                updatedAt: Date.now(),
+              };
+            }),
+          });
+          try {
+            // Detect localStorage quota issues
+            const blob = JSON.stringify(get().projects);
+            if (blob.length > 6 * 1024 * 1024) {
+              get().pushToast(
+                "工作区接近浏览器存储上限,建议归档或删除部分文件",
+                "warn",
+              );
+            }
+          } catch {
+            /* ignore */
+          }
+          get().pushToast(`已上传 ${ok} 个文件`, "ok");
+        }
+
+        return { ok, failed };
       },
 
       /* ---------- Agent ---------- */

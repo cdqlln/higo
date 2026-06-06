@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../../store";
 import { skillById } from "../../lib/skills";
 import type { Project, TreeNode } from "../../types";
@@ -9,12 +9,27 @@ export default function FileTree({ project }: { project: Project }) {
   const createNode = useStore((s) => s.createNode);
   const renameNode = useStore((s) => s.renameNode);
   const deleteNode = useStore((s) => s.deleteNode);
+  const uploadFiles = useStore((s) => s.uploadFiles);
   const toggleProjectMcp = useStore((s) => s.toggleProjectMcp);
   const installed = useStore((s) => s.installedSkills);
 
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState<{ nodeId: string | null; x: number; y: number } | null>(null);
   const [rename, setRename] = useState<{ id: string; value: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadParent, setUploadParent] = useState<string | null>(null);
+
+  async function handleFiles(files: FileList | File[], parentId: string | null) {
+    setUploading(true);
+    try {
+      await uploadFiles(project.id, parentId, files);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   // Filter that keeps folders that contain a matching child
   function filterTree(nodes: TreeNode[]): TreeNode[] {
@@ -44,13 +59,15 @@ export default function FileTree({ project }: { project: Project }) {
   function renderNode(n: TreeNode, depth = 0): React.ReactNode {
     const isFolder = n.type === "folder";
     const isActive = n.id === project.activeFileId;
+    const isDropOver = dropTarget === n.id && isFolder;
     return (
       <li
         key={n.id}
         className={
           (isFolder ? "ft-folder" : "ft-file") +
           (isFolder && n.open ? " open" : "") +
-          (isActive ? " active" : "")
+          (isActive ? " active" : "") +
+          (isDropOver ? " drop-target" : "")
         }
       >
         <div
@@ -64,6 +81,31 @@ export default function FileTree({ project }: { project: Project }) {
             e.preventDefault();
             setMenu({ nodeId: n.id, x: e.clientX, y: e.clientY });
           }}
+          onDragOver={
+            isFolder
+              ? (e) => {
+                  if (e.dataTransfer.types.includes("Files")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTarget(n.id);
+                  }
+                }
+              : undefined
+          }
+          onDragLeave={isFolder ? () => setDropTarget(null) : undefined}
+          onDrop={
+            isFolder
+              ? (e) => {
+                  if (e.dataTransfer.files.length > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTarget(null);
+                    setDragOver(false);
+                    void handleFiles(e.dataTransfer.files, n.id);
+                  }
+                }
+              : undefined
+          }
         >
           {isFolder ? (
             <span className="ft-caret">{n.open ? "▾" : "▸"}</span>
@@ -105,10 +147,63 @@ export default function FileTree({ project }: { project: Project }) {
   }
 
   return (
-    <aside className="ide-filetree">
+    <aside
+      className={"ide-filetree" + (dragOver ? " drag-over" : "")}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        // Only clear when leaving the panel boundary
+        if (e.currentTarget === e.target) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          setDragOver(false);
+          setDropTarget(null);
+          void handleFiles(e.dataTransfer.files, null);
+        }
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            void handleFiles(e.target.files, uploadParent);
+            e.target.value = "";
+          }
+        }}
+      />
+      {dragOver && (
+        <div className="ft-drop-overlay">
+          <div className="ft-drop-icon">⇪</div>
+          <div className="ft-drop-text">拖放以上传到项目</div>
+          <div className="ft-drop-sub">支持 文档 · 图片 · PDF · 数据表 · 单文件 &lt; 4 MB</div>
+        </div>
+      )}
+      {uploading && (
+        <div className="ft-uploading">
+          <span className="ft-spinner" /> 上传中…
+        </div>
+      )}
       <div className="ft-header">
         <span>项目文件</span>
         <div className="ft-h-actions">
+          <button
+            title="上传文件 (或拖放至此)"
+            onClick={() => {
+              setUploadParent(null);
+              fileInputRef.current?.click();
+            }}
+          >
+            ⇪
+          </button>
           <button
             title="新建文件"
             onClick={() => {
@@ -166,6 +261,13 @@ export default function FileTree({ project }: { project: Project }) {
           x={menu.x}
           y={menu.y}
           items={[
+            {
+              label: "上传文件到此处...",
+              onClick: () => {
+                setUploadParent(menu.nodeId);
+                fileInputRef.current?.click();
+              },
+            },
             {
               label: "新建文件",
               onClick: () => {

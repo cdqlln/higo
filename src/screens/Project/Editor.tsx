@@ -94,9 +94,14 @@ export default function Editor({
     return (
       <div className="ed-empty">
         <div className="ed-empty-title">未打开任何文件</div>
-        <div className="ed-empty-sub">从左侧文件树点击文件以打开</div>
+        <div className="ed-empty-sub">从左侧文件树点击或拖放文件以打开</div>
       </div>
     );
+  }
+
+  // Binary preview path: image, PDF, or unknown binary
+  if (file.binaryData) {
+    return <BinaryViewer file={file} />;
   }
 
   return (
@@ -236,5 +241,60 @@ export default function Editor({
         </article>
       </div>
     </>
+  );
+}
+
+function formatBytes(b: number): string {
+  if (b < 1024) return b + " B";
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+  return (b / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function BinaryViewer({ file }: { file: TreeNode }) {
+  const mime = file.mimeType ?? "";
+  const isImage = mime.startsWith("image/");
+  const isPdf = mime === "application/pdf";
+  function download() {
+    if (!file.binaryData) return;
+    const a = document.createElement("a");
+    a.href = file.binaryData;
+    a.download = file.name;
+    a.click();
+  }
+  return (
+    <div className="ed-binary">
+      <div className="ed-bin-bar">
+        <div className="ed-bin-info">
+          <span className="ed-bin-name">{file.name}</span>
+          <span className="ed-bin-meta">
+            {file.mimeType ?? "binary"} · {file.size ? formatBytes(file.size) : ""}
+          </span>
+        </div>
+        <button className="ed-bin-dl" onClick={download}>
+          下载
+        </button>
+      </div>
+      <div className="ed-bin-body">
+        {isImage && file.binaryData && (
+          <img className="ed-bin-img" src={file.binaryData} alt={file.name} />
+        )}
+        {isPdf && file.binaryData && (
+          <iframe
+            className="ed-bin-pdf"
+            src={file.binaryData}
+            title={file.name}
+          />
+        )}
+        {!isImage && !isPdf && (
+          <div className="ed-bin-fallback">
+            <div className="ed-bin-fb-icon">📦</div>
+            <div className="ed-bin-fb-title">无法在浏览器中预览此文件类型</div>
+            <div className="ed-bin-fb-sub">
+              点击右上「下载」按钮在本机打开,或交给 Agent 处理。
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
