@@ -862,6 +862,123 @@ mark { background: rgba(212, 175, 106, 0.18); color: var(--accent); padding: 0 4
 }
 
 /* =============================================
+   EDITOR · save badge + word count
+   ============================================= */
+.ed-status {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.ed-words { color: var(--text-3); font-size: 10.5px; }
+.save-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  border: 1px solid transparent;
+}
+.save-badge.saved { color: var(--green); border-color: rgba(78, 203, 143, 0.25); background: rgba(78, 203, 143, 0.08); }
+.save-badge.dirty { color: var(--amber); border-color: rgba(230, 161, 78, 0.30); background: rgba(230, 161, 78, 0.10); }
+.save-badge.saving { color: var(--accent); border-color: rgba(212, 175, 106, 0.30); background: rgba(212, 175, 106, 0.10); }
+.save-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.05);
+}
+.save-badge.dirty .save-dot, .save-badge.saving .save-dot {
+  animation: blinkpulse 1.4s infinite;
+}
+@keyframes blinkpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* =============================================
+   EDITOR · table picker + table toolbar
+   ============================================= */
+.tbl-trigger-wrap { position: relative; }
+.tbl-trigger.in-table { background: rgba(212, 175, 106, 0.18); color: var(--accent); }
+.ed-table-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: var(--shadow);
+  min-width: 200px;
+}
+.ed-tp-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 14px);
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.ed-tp-cell {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.ed-tp-cell:hover, .ed-tp-cell.on {
+  background: rgba(212, 175, 106, 0.35);
+  border-color: var(--accent);
+}
+.ed-tp-label { font-size: 11px; color: var(--text-2); text-align: center; padding: 4px 0; font-family: var(--mono); }
+.ed-tp-custom {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+  padding: 5px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.ed-tp-custom:hover { border-color: var(--accent); color: var(--accent); }
+
+.ed-table-toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 12px;
+  background: rgba(212, 175, 106, 0.08);
+  border-bottom: 1px solid rgba(212, 175, 106, 0.25);
+  font-size: 11.5px;
+  color: var(--text-2);
+  flex-wrap: wrap;
+}
+.ed-table-toolbar-label {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 8px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.ed-tt-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+.ed-tt-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ed-tt-btn.danger:hover { border-color: var(--red); color: var(--red); }
+.ed-table-toolbar-hint {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* Editor table styling: highlight focused cell */
+.ed-page table td:focus, .ed-page table th:focus { outline: 2px solid var(--blue-2); outline-offset: -2px; }
+
+/* =============================================
    FILE TREE — internal drag, selection, cut/copy
    ============================================= */
 .ft-folder.selected > .ft-row,
