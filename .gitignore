@@ -1,3 +1,9 @@
-assets/
-protected/runtime/
-themes/classic/views/
+node_modules/
+dist/
+*.log
+.DS_Store
+.vite/
+
+# tsc emits (should not be in repo)
+src/**/*.js
+*.tsbuildinfo
