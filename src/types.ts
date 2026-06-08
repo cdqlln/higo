@@ -140,6 +140,8 @@ export interface TreeNode {
   content?: string;
   /** for non-text files: data URL (`data:mime/type;base64,...`) */
   binaryData?: string;
+  /** structured spreadsheet data (for .xlsx / .xls / new sheets) */
+  spreadsheet?: Spreadsheet;
   /** MIME type as reported at upload time */
   mimeType?: string;
   /** size in bytes */
@@ -151,6 +153,35 @@ export interface TreeNode {
   /** doc icon emoji */
   icon?: string;
   updatedAt: number;
+}
+
+/* ---------- Spreadsheet ---------- */
+export interface Spreadsheet {
+  sheets: SpreadsheetSheet[];
+  activeSheet: number;
+}
+
+export interface SpreadsheetSheet {
+  name: string;
+  rows: number;
+  cols: number;
+  /** Sparse map of "A1" → cell. Empty cells absent. */
+  cells: Record<string, Cell>;
+  /** Per-column widths in px (defaults to 96 if absent) */
+  colWidths?: Record<number, number>;
+}
+
+export interface Cell {
+  /** Computed display value (after formula eval) */
+  v?: string | number;
+  /** Raw user input (`=SUM(A1:A10)`, `2024-01-01`, `12.50`, ...) */
+  raw?: string;
+  /** Cached formula (with leading `=`) when raw is a formula */
+  f?: string;
+  fmt?: "text" | "number" | "date" | "percent" | "currency";
+  bold?: boolean;
+  italic?: boolean;
+  align?: "left" | "center" | "right";
 }
 
 /* ---------- Agent ---------- */

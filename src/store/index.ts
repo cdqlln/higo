@@ -101,6 +101,12 @@ interface StoreState {
     nodeId: string,
     parentId?: string | null,
   ) => string | null;
+  /** Replace a file's spreadsheet structure wholesale (after any edit). */
+  updateSpreadsheet: (
+    projectId: string,
+    nodeId: string,
+    spreadsheet: import("../types").Spreadsheet,
+  ) => void;
   /** In-memory clipboard used by copy / cut / paste — not persisted. */
   treeClipboard: { projectId: string; nodeId: string; mode: "copy" | "cut" } | null;
   setTreeClipboard: (
@@ -416,11 +422,16 @@ export const useStore = create<StoreState>()(
       /* ---------- File tree ---------- */
       createNode: (projectId, parentId, node) => {
         const id = uid(node.type === "folder" ? "d" : "f");
+        const isXlsx =
+          node.type === "file" && /\.(xlsx|xls)$/i.test(node.name);
         const newNode: TreeNode = {
           id,
           type: node.type,
           name: node.name,
-          content: node.content ?? (node.type === "file" ? "" : undefined),
+          content: node.content ?? (node.type === "file" && !isXlsx ? "" : undefined),
+          spreadsheet: isXlsx
+            ? { sheets: [{ name: "Sheet1", rows: 20, cols: 10, cells: {} }], activeSheet: 0 }
+            : undefined,
           children: node.type === "folder" ? [] : undefined,
           open: node.type === "folder" ? true : undefined,
           icon: node.type === "file" ? fileIcon(node.name) : undefined,
@@ -551,6 +562,22 @@ export const useStore = create<StoreState>()(
         });
       },
 
+      updateSpreadsheet: (projectId, nodeId, spreadsheet) => {
+        set({
+          projects: get().projects.map((p) => {
+            if (p.id !== projectId) return p;
+            const upd = (nodes: TreeNode[]): TreeNode[] =>
+              nodes.map((n) => {
+                if (n.id === nodeId)
+                  return { ...n, spreadsheet, updatedAt: Date.now() };
+                if (n.children) return { ...n, children: upd(n.children) };
+                return n;
+              });
+            return { ...p, fileTree: upd(p.fileTree), updatedAt: Date.now() };
+          }),
+        });
+      },
+
       moveNode: (projectId, nodeId, newParentId) => {
         const project = get().projects.find((p) => p.id === projectId);
         if (!project) return { ok: false, error: "project not found" };
@@ -647,6 +674,7 @@ export const useStore = create<StoreState>()(
               name: u.name,
               content: u.content,
               binaryData: u.binaryData,
+              spreadsheet: u.spreadsheet,
               mimeType: u.mimeType,
               size: u.size,
               icon: fileIconFor(u.kind, u.name),

@@ -13,6 +13,7 @@ import {
   insertRow,
   toggleHeaderRow,
 } from "../../lib/editor";
+import SpreadsheetEditor from "./SpreadsheetEditor";
 
 type SaveState = "saved" | "dirty" | "saving";
 
@@ -230,6 +231,11 @@ export default function Editor({
         <div className="ed-empty-sub">从左侧文件树点击或拖放文件以打开</div>
       </div>
     );
+  }
+
+  // Spreadsheet path (xlsx / new sheet)
+  if (file.spreadsheet) {
+    return <SpreadsheetEditor project={project} file={file} />;
   }
 
   // Binary preview path: image, PDF, or unknown binary

@@ -12,7 +12,7 @@
 export const MAX_SINGLE_FILE_BYTES = 4 * 1024 * 1024;
 export const WARN_FILE_BYTES = 1.5 * 1024 * 1024;
 
-export type UploadKind = "text" | "image" | "pdf" | "binary";
+export type UploadKind = "text" | "image" | "pdf" | "binary" | "spreadsheet";
 
 export interface UploadedFile {
   name: string;
@@ -23,6 +23,8 @@ export interface UploadedFile {
   content?: string;
   /** for non-text kinds — full data: URL */
   binaryData?: string;
+  /** for "spreadsheet" kind — parsed structure */
+  spreadsheet?: import("../types").Spreadsheet;
 }
 
 const TEXT_EXTS = new Set([
@@ -41,6 +43,9 @@ function extOf(name: string): string {
 function classifyKind(file: File): UploadKind {
   const ext = extOf(file.name);
   const mime = file.type || "";
+  if (ext === "xlsx" || ext === "xls" || mime.includes("spreadsheetml") || mime === "application/vnd.ms-excel") {
+    return "spreadsheet";
+  }
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (mime.startsWith("image/")) return "image";
   if (TEXT_EXTS.has(ext)) return "text";
@@ -50,6 +55,7 @@ function classifyKind(file: File): UploadKind {
 
 export function fileIconFor(kind: UploadKind, name: string): string {
   const ext = extOf(name);
+  if (kind === "spreadsheet") return "📊";
   if (kind === "image") return "🖼";
   if (kind === "pdf") return "📕";
   if (ext === "docx" || ext === "doc") return "📄";
@@ -84,6 +90,15 @@ function readAsDataURL(file: File): Promise<string> {
   });
 }
 
+function readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error);
+    r.onload = () => resolve(r.result as ArrayBuffer);
+    r.readAsArrayBuffer(file);
+  });
+}
+
 /** Read a single File and return UploadedFile, or throw if too large. */
 export async function readFile(file: File): Promise<UploadedFile> {
   if (file.size > MAX_SINGLE_FILE_BYTES) {
@@ -94,6 +109,13 @@ export async function readFile(file: File): Promise<UploadedFile> {
   const kind = classifyKind(file);
   const mime = file.type || guessMime(file.name, kind);
   const base = { name: file.name, kind, mimeType: mime, size: file.size };
+  if (kind === "spreadsheet") {
+    const buf = await readAsArrayBuffer(file);
+    const { parseXlsxArrayBuffer, recomputeSheet } = await import("./spreadsheet");
+    const ss = await parseXlsxArrayBuffer(buf);
+    ss.sheets.forEach(recomputeSheet);
+    return { ...base, spreadsheet: ss };
+  }
   if (kind === "text") {
     const raw = await readAsText(file);
     const ext = extOf(file.name);
@@ -125,6 +147,8 @@ export async function readFile(file: File): Promise<UploadedFile> {
 function guessMime(name: string, kind: UploadKind): string {
   const ext = extOf(name);
   if (kind === "pdf") return "application/pdf";
+  if (kind === "spreadsheet" || ext === "xlsx")
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (ext === "png") return "image/png";
   if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
   if (ext === "gif") return "image/gif";
